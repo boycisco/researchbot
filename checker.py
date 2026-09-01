@@ -2,13 +2,14 @@ import logging
 import utils
 import prompts
 import gemini
+import providers
 
 logger = utils.logger
 
 def check_answer(answer, package_content):
     """Fact-check the answer against the research package."""
     prompt = prompts.checker_prompt(answer, package_content)
-    result = gemini.generate_json(prompt)
+    result = providers.generate_json(prompt)
     if not result['success']:
         return {"status": "verification_error", "error": result.get('error')}
     data = result['data']

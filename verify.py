@@ -3,6 +3,7 @@ import json
 import utils
 import prompts
 import gemini
+import providers
 
 logger = utils.logger
 
@@ -19,7 +20,7 @@ def verify_sources(sources, research_context):
     for i, s in enumerate(sources):
         sources_text += f"\n--- Source {i+1} ---\nTitle: {s.get('title','')}\nDomain: {s.get('domain','')}\nSnippet: {s.get('snippet','')}\nURL: {s.get('url','')}\n"
     prompt = prompts.batch_verification_prompt(sources_text, research_context)
-    result = gemini.generate_json(prompt)
+    result = providers.generate_json(prompt)
     if not result['success']:
         logger.error(f"Batch verification failed: {result.get('error')}")
         return []

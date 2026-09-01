@@ -18,6 +18,18 @@ def init_db():
         if 'rank' not in existing_columns:
             conn.execute("ALTER TABLE sources ADD COLUMN rank INTEGER DEFAULT 0")
             conn.commit()
+        if 'http_status' not in existing_columns:
+            conn.execute("ALTER TABLE sources ADD COLUMN http_status INTEGER")
+            conn.commit()
+        if 'fetched_at' not in existing_columns:
+            conn.execute("ALTER TABLE sources ADD COLUMN fetched_at TIMESTAMP")
+            conn.commit()
+        if 'parent_source_id' not in existing_columns:
+            conn.execute("ALTER TABLE sources ADD COLUMN parent_source_id INTEGER")
+            conn.commit()
+        if 'source_lineage' not in existing_columns:
+            conn.execute("ALTER TABLE sources ADD COLUMN source_lineage TEXT")
+            conn.commit()
 
 # User helpers
 def get_or_create_user(telegram_id):
@@ -114,12 +126,16 @@ def update_source_fetch(source_id, fetch_data):
         conn.execute("""
             UPDATE sources SET
                 content=?, word_count=?, title=?, published_at=?,
-                fetch_status=?
+                fetch_status=?, http_status=?, fetched_at=CURRENT_TIMESTAMP
             WHERE id=?
         """, (
-            fetch_data.get('content'), fetch_data.get('word_count'),
-            fetch_data.get('title'), fetch_data.get('published_at'),
-            fetch_data.get('status'), source_id
+            fetch_data.get('content'),
+            fetch_data.get('word_count'),
+            fetch_data.get('title'),
+            fetch_data.get('published_at'),
+            fetch_data.get('status'),
+            fetch_data.get('http_status'),
+            source_id
         ))
         conn.commit()
 

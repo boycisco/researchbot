@@ -14,7 +14,7 @@ Return JSON with:
 Do not include any markdown, only JSON.
 """
 
-def query_prompt(analysis_json):
+def query_prompt(analysis_json, max_queries=8):
     return f"""
 Given this research analysis:
 {analysis_json}
@@ -29,13 +29,14 @@ Queries should cover:
 - counterarguments
 - historical context if relevant
 
+Constraints:
+- Maximum {max_queries} queries.
+- Remove duplicates and near-duplicates.
+- Each query should be distinct in purpose.
+- Use specific terms, not vague phrases.
+
 Return JSON:
 {{"queries": [{{"query": "...", "purpose": "...", "priority": 1}}]}}
-Rules:
-- Remove duplicates, avoid near-identical queries.
-- Limit to max 8 queries.
-- Do not use conversational language.
-- Do not just repeat the original user sentence.
 Only JSON.
 """
 
@@ -66,7 +67,7 @@ Return JSON:
   "quality_score": 0-100,
   "evidence_score": 0-100,
   "recency_score": 0-100,
-  "source_type": "government|academic|research|news|organization|company|blog|other",
+  "source_type": "government|academic|research_institution|primary_source|news|organization|company|blog|forum|other",
   "is_primary": true/false,
   "reason": "brief explanation"
 }}
@@ -176,7 +177,7 @@ Return JSON in this exact format:
       "quality_score": 0-100,
       "evidence_score": 0-100,
       "recency_score": 0-100,
-      "source_type": "government|academic|research|news|organization|company|blog|other",
+      "source_type": "government|academic|research_institution|primary_source|news|organization|company|blog|forum|other",
       "is_primary": true/false,
       "reason": "brief explanation"
     }},

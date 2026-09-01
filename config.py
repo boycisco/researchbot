@@ -21,6 +21,9 @@ MAX_AI_REQUESTS = 3
 # Database file
 DB_PATH = "researchbot.db"
 
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
+SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "duckduckgo")
+
 # Gemini model settings
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 GEMINI_TEMPERATURE = 0.2

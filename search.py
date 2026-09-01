@@ -1,3 +1,4 @@
+import re
 import logging
 import time
 from threading import Semaphore
@@ -5,36 +6,42 @@ from ddgs import DDGS
 import utils
 import gemini
 import prompts
+import providers
 
 logger = utils.logger
 
 # Global semaphore for search requests (thread-safe)
 search_semaphore = Semaphore(5)  # max concurrent searches
 
-def generate_queries(analysis_json):
+def generate_queries(analysis_json, max_queries=8):
     """Use Gemini to generate search queries based on analysis."""
-    prompt = prompts.query_prompt(analysis_json)
-    result = gemini.generate_json(prompt)
+    prompt = prompts.query_prompt(analysis_json, max_queries)
+    result = providers.generate_json(prompt)
     if not result['success']:
         logger.error("Query generation failed")
         return None
     queries = result['data'].get('queries', [])
-    # filter and clean
+    # Clean and deduplicate
     cleaned = []
     seen = set()
     for q in queries:
         query_text = q.get('query', '').strip()
         if not query_text:
             continue
-        if query_text.lower() in seen:
+        # Normalize for dedup: lowercase, remove punctuation
+        norm = re.sub(r'[^\w\s]', '', query_text.lower())
+        norm = ' '.join(norm.split())
+        if norm in seen:
             continue
-        seen.add(query_text.lower())
+        seen.add(norm)
         cleaned.append({
             'query': query_text,
             'purpose': q.get('purpose', ''),
             'priority': q.get('priority', 1)
         })
-    return cleaned[:8]  # max 8
+    # If more than max_queries, keep highest priority (lower number = higher)
+    cleaned.sort(key=lambda x: x['priority'])
+    return cleaned[:max_queries]
 
 def search_web(query, max_results=5):
     """Perform a web search using DuckDuckGo (no API key needed)."""

@@ -3,6 +3,7 @@ import json
 import utils
 import prompts
 import gemini
+import providers
 
 logger = utils.logger
 
@@ -19,7 +20,7 @@ def extract_claims_batch(sources_with_content, research_question):
         content_snippet = s['content'][:3000]
         sources_text += f"\n--- Source {i+1} (ID: {s['source_id']}) ---\n{content_snippet}\n"
     prompt = prompts.batch_claims_prompt(sources_text, research_question)
-    result = gemini.generate_json(prompt)
+    result = providers.generate_json(prompt)
     if not result['success']:
         logger.error(f"Batch claim extraction failed: {result.get('error')}")
         return []

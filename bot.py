@@ -1,3 +1,5 @@
+import research
+from request import ResearchRequest
 import logging
 import asyncio
 from telegram import Update
@@ -49,12 +51,13 @@ async def start_new_research(update, context, topic):
     """Create a research job and start worker with progress callback."""
     user = update.effective_user
     telegram_id = str(user.id)
-    user_id = database.get_or_create_user(telegram_id)
-    research_id = database.create_research(user_id, topic)
+
+    # Build a ResearchRequest with defaults
+    request = ResearchRequest(topic=topic)
 
     # Send initial message and keep a reference to it
     progress_message = await update.message.reply_text(
-        f"🔎 Research started (ID: {research_id}).\nStatus: initializing..."
+        f"🔎 Research started (ID: pending)...\nStatus: initializing..."
     )
 
     # Capture the running event loop (main thread)
@@ -71,11 +74,15 @@ async def start_new_research(update, context, topic):
             except Exception as e:
                 utils.logger.error(f"Failed to update progress message: {e}")
 
-        # Schedule the edit on the main event loop
         asyncio.run_coroutine_threadsafe(update_message(), loop)
 
-    # Start worker in background with callback
-    worker.start_research(research_id, progress_callback)
+    # Start the research via the application layer
+    research_id = research.research(request, telegram_id, progress_callback)
+
+    # Update the initial message with the actual research ID
+    await progress_message.edit_text(
+        f"🔎 Research {research_id} status:\n{fmt.format_progress('analysis')}"
+    )
 
 async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user

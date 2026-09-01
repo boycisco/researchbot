@@ -4,7 +4,6 @@ import time
 import json
 import utils
 from database import *
-import gemini
 import search
 import fetch
 import verify
@@ -14,6 +13,7 @@ import package as pkg
 import writer
 import checker
 import prompts
+import providers
 
 logger = utils.logger
 
@@ -40,7 +40,7 @@ def run_research(research_id, progress_callback=None):
             # Stage 1: Analysis
             send_progress('analysis')
             update_research_status(research_id, status='analyzing', stage='analysis')
-            analysis_result = gemini.generate_json(prompts.analysis_prompt(topic))
+            analysis_result = providers.generate_json(prompts.analysis_prompt(topic))
             if not analysis_result['success']:
                 update_research_status(research_id, status='failed', stage='analysis', error=analysis_result.get('error'))
                 send_progress('failed')
@@ -57,7 +57,7 @@ def run_research(research_id, progress_callback=None):
             # Stage 2: Query generation
             send_progress('query_generation')
             update_research_status(research_id, status='planning', stage='query_generation')
-            queries = search.generate_queries(json.dumps(analysis))
+            queries = search.generate_queries(json.dumps(analysis), max_queries=8)
             if queries is None or len(queries) == 0:
                 update_research_status(research_id, status='failed', stage='query_generation', error='No queries generated')
                 send_progress('failed')
@@ -79,7 +79,7 @@ def run_research(research_id, progress_callback=None):
                     update_research_status(research_id, status='cancelled', stage='search')
                     send_progress('cancelled')
                     return
-                results = search.search_web(q['query'], max_results=5)
+                results = providers.search_web(q['query'], max_results=5)
                 for result in results:
                     if not any(s['url'] == result['url'] for s in all_sources):
                         all_sources.append(result)
@@ -109,7 +109,10 @@ def run_research(research_id, progress_callback=None):
                     source['published_at'] = fetch_result.get('published_at')
                     update_source_fetch(source['id'], fetch_result)
                 else:
-                    update_source_fetch(source['id'], {'status': fetch_result.get('status', 'failed')})
+                    update_source_fetch(source['id'], {
+                        'status': fetch_result.get('status', 'failed'),
+                        'http_status': fetch_result.get('http_status')
+                    })
 
             # Limit to top 5 sources with content
             sources_with_content = [s for s in all_sources if 'content' in s and s['content']][:5]
@@ -221,7 +224,7 @@ def run_research(research_id, progress_callback=None):
                         logger.info(f"Fact check failed (attempt {attempt+1}), revising...")
                         feedback = json.dumps(check_result.get('unsupported_claims', []))
                         revision_prompt = prompts.writer_prompt(package_content, topic, analysis.get('intent', '')) + f"\n\nPrevious answer failed fact-check. Unsupported claims: {feedback}\nRevise the answer to only include supported information."
-                        result = gemini.generate_text(revision_prompt)
+                        result = providers.generate_text(revision_prompt)
                         if result['success']:
                             answer_text = result['text']
                             store_answer(research_id, answer_text, 'revised')
