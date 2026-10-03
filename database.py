@@ -13,23 +13,24 @@ def init_db():
     with get_connection() as conn:
         conn.executescript(models.SCHEMA)
         conn.commit()
-        # Simple migration: add missing columns to sources table
+
+        # Read the current columns after schema creation
         existing_columns = [row[1] for row in conn.execute("PRAGMA table_info(sources)").fetchall()]
-        if 'rank' not in existing_columns:
-            conn.execute("ALTER TABLE sources ADD COLUMN rank INTEGER DEFAULT 0")
-            conn.commit()
-        if 'http_status' not in existing_columns:
-            conn.execute("ALTER TABLE sources ADD COLUMN http_status INTEGER")
-            conn.commit()
-        if 'fetched_at' not in existing_columns:
-            conn.execute("ALTER TABLE sources ADD COLUMN fetched_at TIMESTAMP")
-            conn.commit()
-        if 'parent_source_id' not in existing_columns:
-            conn.execute("ALTER TABLE sources ADD COLUMN parent_source_id INTEGER")
-            conn.commit()
-        if 'source_lineage' not in existing_columns:
-            conn.execute("ALTER TABLE sources ADD COLUMN source_lineage TEXT")
-            conn.commit()
+
+        migrations = [
+            ("rank",               "ALTER TABLE sources ADD COLUMN rank INTEGER DEFAULT 0"),
+            ("http_status",        "ALTER TABLE sources ADD COLUMN http_status INTEGER"),
+            ("fetched_at",         "ALTER TABLE sources ADD COLUMN fetched_at TIMESTAMP"),
+            ("parent_source_id",   "ALTER TABLE sources ADD COLUMN parent_source_id INTEGER"),
+            ("source_lineage",     "ALTER TABLE sources ADD COLUMN source_lineage TEXT"),
+            ("bias_score",         "ALTER TABLE sources ADD COLUMN bias_score REAL"),
+            ("completeness_score", "ALTER TABLE sources ADD COLUMN completeness_score REAL"),
+        ]
+
+        for column_name, sql in migrations:
+            if column_name not in existing_columns:
+                conn.execute(sql)
+                conn.commit()
 
 # User helpers
 def get_or_create_user(telegram_id):
@@ -108,13 +109,22 @@ def get_queries(research_id):
 
 # Source helpers
 def insert_source(research_id, query_id, source):
+    canonical = source.get('canonical_url') or source.get('url')
     with get_connection() as conn:
+        # Deduplicate by canonical_url within the same research
+        existing = conn.execute(
+            "SELECT id FROM sources WHERE research_id=? AND canonical_url=?",
+            (research_id, canonical)
+        ).fetchone()
+        if existing:
+            return existing['id']
+
         cur = conn.execute("""
             INSERT INTO sources 
             (research_id, query_id, url, canonical_url, title, domain, snippet, rank)
             VALUES (?,?,?,?,?,?,?,?)
         """, (
-            research_id, query_id, source.get('url'), source.get('canonical_url'),
+            research_id, query_id, source.get('url'), canonical,
             source.get('title'), source.get('domain'), source.get('snippet'),
             source.get('rank', 0)
         ))
@@ -144,14 +154,21 @@ def update_source_verification(source_id, verify_data):
         conn.execute("""
             UPDATE sources SET
                 relevance_score=?, quality_score=?, evidence_score=?,
-                recency_score=?, source_type=?, is_primary=?,
+                recency_score=?, bias_score=?, completeness_score=?,
+                source_type=?, is_primary=?,
                 verification_status=?
             WHERE id=?
         """, (
-            verify_data.get('relevance_score'), verify_data.get('quality_score'),
-            verify_data.get('evidence_score'), verify_data.get('recency_score'),
-            verify_data.get('source_type'), 1 if verify_data.get('is_primary') else 0,
-            verify_data.get('status'), source_id
+            verify_data.get('relevance_score'),
+            verify_data.get('quality_score'),
+            verify_data.get('evidence_score'),
+            verify_data.get('recency_score'),
+            verify_data.get('bias_score'),
+            verify_data.get('completeness_score'),
+            verify_data.get('source_type'),
+            1 if verify_data.get('is_primary') else 0,
+            verify_data.get('status'),
+            source_id
         ))
         conn.commit()
 

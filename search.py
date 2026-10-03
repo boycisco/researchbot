@@ -61,6 +61,7 @@ def search_web(query, max_results=5):
                     normalized.append({
                         'title': title,
                         'url': url,
+                        'canonical_url': utils.normalize_url(url),
                         'domain': utils.get_domain(url),
                         'snippet': snippet,
                         'rank': len(normalized) + 1

@@ -55,14 +55,50 @@ def setup_logging():
 logger = setup_logging()
 
 def normalize_url(url):
-    """Basic URL normalization: strip fragments, lower scheme/host, remove trailing slash."""
-    parsed = urlparse(url)
-    scheme = parsed.scheme.lower()
-    netloc = parsed.netloc.lower()
-    path = parsed.path.rstrip('/')
-    if not path:
-        path = '/'
-    return f"{scheme}://{netloc}{path}"
+    """
+    Robust URL normalization for deduplication.
+    - Lowercase scheme and host
+    - Strip fragment (#...)
+    - Remove common tracking query parameters (utm_*, fbclid, gclid, etc.)
+    - Keep meaningful query params
+    - Remove trailing slash (except for root path)
+    """
+    if not url:
+        return ""
+    try:
+        parsed = urlparse(url)
+
+        scheme = (parsed.scheme or "https").lower()
+        netloc = (parsed.netloc or "").lower()
+
+        path = parsed.path or "/"
+        if len(path) > 1 and path.endswith("/"):
+            path = path.rstrip("/")
+        if not path:
+            path = "/"
+
+        tracking_prefixes = ("utm_", "fbclid", "gclid", "mc_", "ref_")
+        tracking_exact = {"ref", "source", "campaign", "yclid", "igshid"}
+
+        if parsed.query:
+            kept = []
+            for part in parsed.query.split("&"):
+                if not part:
+                    continue
+                key = part.split("=", 1)[0].lower()
+                if key.startswith(tracking_prefixes) or key in tracking_exact:
+                    continue
+                kept.append(part)
+            query = "&".join(kept)
+        else:
+            query = ""
+
+        normalized = f"{scheme}://{netloc}{path}"
+        if query:
+            normalized += f"?{query}"
+        return normalized
+    except Exception:
+        return url.strip()
 
 def get_domain(url):
     return urlparse(url).netloc

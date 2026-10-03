@@ -81,7 +81,11 @@ def run_research(research_id, progress_callback=None):
                     return
                 results = providers.search_web(q['query'], max_results=5)
                 for result in results:
-                    if not any(s['url'] == result['url'] for s in all_sources):
+                    canonical = result.get('canonical_url') or result.get('url')
+                    if not any(
+                        (s.get('canonical_url') or s.get('url')) == canonical
+                        for s in all_sources
+                    ):
                         all_sources.append(result)
                         source_id = insert_source(research_id, q['id'], result)
                         result['id'] = source_id
@@ -139,6 +143,8 @@ def run_research(research_id, progress_callback=None):
                         'quality_score': verify_result.get('quality_score'),
                         'evidence_score': verify_result.get('evidence_score'),
                         'recency_score': verify_result.get('recency_score'),
+                        'bias_score': verify_result.get('bias_score'),
+                        'completeness_score': verify_result.get('completeness_score'),
                         'source_type': verify_result.get('source_type'),
                         'is_primary': verify_result.get('is_primary')
                     })

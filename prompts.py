@@ -113,7 +113,10 @@ Only JSON.
 
 def writer_prompt(package_content, original_question, intent):
     return f"""
-You are a research writer. Write a comprehensive answer to the user's question using ONLY the provided research package.
+You are a research writer. Write a comprehensive, evidence-based answer to the user's question.
+
+The research package below is your ONLY source of facts. Do not use any outside knowledge.
+Do not perform additional research. If the package does not contain evidence for something, do not say it.
 
 User question: {original_question}
 Intent: {intent}
@@ -121,23 +124,46 @@ Intent: {intent}
 Research package (JSON):
 {package_content}
 
-Instructions:
-- Answer directly and clearly.
-- Prioritize high-confidence findings.
-- Distinguish facts from opinions.
-- Acknowledge contradictions and limitations.
-- Cite sources using numbers [1], [2], etc., matching the source list.
-- Do NOT introduce any external information not present in the package.
-- Structure:
-   Quick Answer
-   Key Findings
-   Detailed Explanation
-   Evidence
-   Different Perspectives
-   Limitations
-   Conclusion
-   Sources (list all sources used)
-Return plain text (not markdown), with clear section headers.
+STRICT RULES:
+
+1. CITATIONS
+   - The package contains a "sources" array. Number them 1..N in the order they appear in that array.
+   - IGNORE the internal "id" field of each source. Use only 1, 2, 3, ... for citations.
+   - Cite as [1], [2], [3] next to factual sentences.
+   - In the final "Sources" section, list them as:
+        [1] <url>
+        [2] <url>
+        ...
+
+2. ACCURACY
+   - Every factual sentence must be traceable to a source in the package.
+   - Do not invent sources, URLs, statistics, quotes, or claims.
+   - Do not merge or paraphrase in a way that changes meaning.
+   - If the package contains contradictory claims, say so explicitly and cite both sides.
+
+3. UNCERTAINTY
+   - If evidence is weak or absent, say so. Do not pretend to know.
+   - Do not claim certainty that the package does not support.
+
+4. OUTPUT FORMAT
+   - Return plain text. No markdown code fences. No HTML.
+   - Use these section headers exactly, each on its own line, in uppercase:
+       QUICK ANSWER
+       KEY FINDINGS
+       DETAILED EXPLANATION
+       EVIDENCE
+       DIFFERENT PERSPECTIVES
+       LIMITATIONS
+       CONCLUSION
+       SOURCES
+
+5. FORBIDDEN
+   - Do NOT output any instructions, meta-commentary, formatting notes, or prompt echoes.
+   - Do NOT output the string "CITATION FORMAT" or anything similar.
+   - Do NOT output placeholder tokens like 【...】 or {{{{...}}}}.
+   - Do NOT output anything before the QUICK ANSWER section or after the SOURCES section.
+
+Write the answer now.
 """
 
 def checker_prompt(answer, package_content):
@@ -167,7 +193,18 @@ def batch_verification_prompt(sources_text, research_context):
 You are a source verifier for a research project.
 Research topic: {research_context}
 
-Below are {sources_text.count('--- Source')} sources. For each source, evaluate relevance, quality, evidence quality, recency, primary source status, and source type.
+Below are sources with title, domain, snippet, and URL. For each source, evaluate:
+
+- relevance to the research topic (0-100, higher = more relevant)
+- quality of the source as a publication (0-100, based on reputation, authority, editorial standards)
+- evidence quality (0-100, does it cite data, studies, primary sources?)
+- recency (0-100, 100 = very recent, 0 = outdated or unknown)
+- bias_score (0-100, 100 = impartial/factual, 0 = highly biased or promotional)
+- completeness_score (0-100, does it cover the topic in depth or just superficially?)
+- source_type (one of: government, academic, research_institution, primary_source, news, organization, company, blog, forum, other)
+- is_primary (true if this IS the primary source, e.g. original study, official document; false if it merely reports on one)
+- reason (brief explanation, 1-2 sentences)
+
 Return JSON in this exact format:
 {{
   "sources": [
@@ -177,13 +214,18 @@ Return JSON in this exact format:
       "quality_score": 0-100,
       "evidence_score": 0-100,
       "recency_score": 0-100,
-      "source_type": "government|academic|research_institution|primary_source|news|organization|company|blog|forum|other",
+      "bias_score": 0-100,
+      "completeness_score": 0-100,
+      "source_type": "...",
       "is_primary": true/false,
-      "reason": "brief explanation"
-    }},
+      "reason": "..."
+    }}
     ... one object per source, in the same order
   ]
 }}
+
+Be strict. Do not give high scores out of politeness. A blog post with no evidence should not receive a high evidence_score. A press release should not receive a high bias_score.
+
 Sources:
 {sources_text}
 Only JSON.

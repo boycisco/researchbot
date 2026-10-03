@@ -57,6 +57,8 @@ CREATE TABLE IF NOT EXISTS sources (
     quality_score REAL,
     evidence_score REAL,
     recency_score REAL,
+    bias_score REAL,
+    completeness_score REAL,
     rank INTEGER DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (research_id) REFERENCES research(id),
