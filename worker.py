@@ -190,7 +190,13 @@ def run_research(research_id, progress_callback=None):
                 if rel_result:
                     insert_relationship(research_id, claim_a['id'], claim_b['id'], rel_result)
             relationships_rows = get_relationships(research_id)
-            logger.info(f"Compared claims, found {len(relationships_rows)} relationships")
+            classified = compare.detect_contradictions(claims_rows, relationships_rows)
+            logger.info(
+                f"Compared claims: {len(relationships_rows)} relationships "
+                f"({len(classified['true_contradictions'])} true contradictions, "
+                f"{len(classified['different_contexts'])} different context, "
+                f"{len(classified['qualifiers'])} qualifiers)"
+            )
 
             # Stage 8: Build package
             send_progress('packaging')

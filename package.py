@@ -31,18 +31,12 @@ def build_package(research, sources, claims, relationships):
                 'source_id': c['source_id']
             })
     # Contradictions from relationships where relationship == 'contradicts'
-    contradictions = []
-    for r in relationships:
-        if r['relationship'] == 'contradicts':
-            claim_a = next((c for c in claims if c['id'] == r['claim_a']), None)
-            claim_b = next((c for c in claims if c['id'] == r['claim_b']), None)
-            if claim_a and claim_b:
-                contradictions.append({
-                    'claim_a': claim_a['claim'],
-                    'claim_b': claim_b['claim'],
-                    'reason': r['reason'],
-                    'confidence': r['confidence']
-                })
+    # Use the classification helper to split relationships into categories
+    from compare import detect_contradictions
+    classified = detect_contradictions(claims, relationships)
+    contradictions     = classified['true_contradictions']
+    different_contexts = classified['different_contexts']
+    qualifiers         = classified['qualifiers']
     # Limitations: derive from source count, contradictions, etc.
     limitations = []
     if len(verified_sources) < 3:
@@ -72,7 +66,9 @@ def build_package(research, sources, claims, relationships):
             'confidence': c['confidence']
         } for c in claims],
         'statistics': statistics,
-        'contradictions': contradictions,
+        'contradictions':     contradictions,
+        'different_contexts': different_contexts,
+        'qualifiers':         qualifiers,
         'limitations': limitations,
         'sources': source_list
     }

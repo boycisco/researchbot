@@ -94,20 +94,63 @@ Only include claims that are relevant and supported by the source. Do not invent
 Only JSON.
 """
 
-def comparison_prompt(claim_a, claim_b):
+def comparison_prompt(claim_a, claim_b, evidence_a="", evidence_b=""):
     return f"""
-You are comparing two claims from different sources to determine their relationship.
+You are comparing two claims drawn from different sources. Your job is to classify their relationship.
 
-Claim A: "{claim_a}"
-Claim B: "{claim_b}"
+Claim A: {claim_a}
+Supporting evidence for A: {evidence_a[:400]}
 
-Determine if they support each other, contradict, partially support, are related, or unrelated.
+Claim B: {claim_b}
+Supporting evidence for B: {evidence_b[:400]}
+
+Choose exactly one relationship from this list:
+
+- supports
+    B provides independent evidence that A is true.
+
+- partially_supports
+    B supports part of A but not all of A.
+
+- contradicts
+    A and B cannot both be true. Same subject, same timeframe, same population,
+    opposite conclusion. This is a TRUE CONTRADICTION.
+
+- qualifies
+    B is true only under specific conditions, refining or narrowing A.
+    Both can coexist.
+
+- different_context
+    A and B appear to conflict, but they refer to different populations,
+    definitions, timeframes, methodologies, or scope. Both can be true.
+
+- related
+    A and B are on the same topic but are neither agreeing nor disagreeing.
+
+- unrelated
+    A and B concern different topics.
+
+Then provide:
+
+- context_notes: a short explanation (1-3 sentences) of WHY you chose this relationship.
+  For "different_context" and "qualifies", explicitly state the relevant difference
+  (population, date, methodology, definition, etc.).
+
+- confidence: 0-100, how confident you are in this classification.
+
+RULES:
+- Be strict about "contradicts". Only use it for genuine, irreconcilable disagreement.
+- Do NOT use "contradicts" when the difference is population, timeframe, methodology,
+  or definitions. Use "different_context" instead.
+- Do NOT invent facts not present in the two claims and their evidence.
+
 Return JSON:
 {{
-  "relationship": "supports|contradicts|partially_supports|related|unrelated",
-  "reason": "brief explanation",
+  "relationship": "supports|partially_supports|contradicts|qualifies|different_context|related|unrelated",
+  "context_notes": "...",
   "confidence": 0-100
 }}
+
 Only JSON.
 """
 
