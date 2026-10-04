@@ -4,14 +4,14 @@ import time
 import json
 import utils
 from database import *
-import search
-import fetch
-import verify
-import claims
-import compare
+from stages import search
+from stages import fetch
+from stages import verify
+from stages import claims
+from stages import compare
+from stages import writer
+from stages import checker
 import package as pkg
-import writer
-import checker
 from ai import prompts
 import providers
 import confidence

@@ -1,7 +1,7 @@
 import config
 from ai import gemini
-import search
-import fetch
+from stages import search
+from stages import fetch
 
 # AI Provider
 def generate_text(prompt, temperature=None, max_output_tokens=None):

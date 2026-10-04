@@ -55,7 +55,7 @@ def build_package(research, sources, claims, relationships, queries):
             })
 
     # ---------- Contradictions & contexts ----------
-    from compare import detect_contradictions
+    from stages.compare import detect_contradictions
     classified = detect_contradictions(claims, relationships)
     contradictions     = classified['true_contradictions']
     different_contexts = classified['different_contexts']
