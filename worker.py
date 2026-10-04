@@ -213,7 +213,13 @@ def run_research(research_id, progress_callback=None):
             # Stage 8: Build package
             send_progress('packaging')
             update_research_status(research_id, status='packaging', stage='packaging')
-            package_content = pkg.build_package(research, verified_sources, claims_rows, relationships_rows)
+            package_content = pkg.build_package(
+                research,
+                verified_sources,
+                claims_rows,
+                relationships_rows,
+                query_rows,
+            )
             store_package(research_id, package_content)
             logger.info("Package built")
 

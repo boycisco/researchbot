@@ -14,9 +14,6 @@ def init_db():
         conn.executescript(models.SCHEMA)
         conn.commit()
 
-        # Read the current columns after schema creation
-        existing_columns = [row[1] for row in conn.execute("PRAGMA table_info(sources)").fetchall()]
-
         migrations = [
             ("rank",               "ALTER TABLE sources ADD COLUMN rank INTEGER DEFAULT 0"),
             ("http_status",        "ALTER TABLE sources ADD COLUMN http_status INTEGER"),
@@ -31,9 +28,12 @@ def init_db():
         ]
 
         for column_name, sql in migrations:
-            if column_name not in existing_columns:
+            try:
                 conn.execute(sql)
                 conn.commit()
+            except sqlite3.OperationalError as e:
+                if "duplicate column" not in str(e).lower():
+                    raise
 
 # User helpers
 def get_or_create_user(telegram_id):

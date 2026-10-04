@@ -8,14 +8,12 @@ logger = utils.logger
 
 # Patterns to strip from the model output if they leak through
 _LEAK_PATTERNS = [
-    # Lines that echo instructions
     re.compile(r'^\s*CITATION FORMAT\s*:.*$', re.IGNORECASE | re.MULTILINE),
     re.compile(r'^\s*STRICT RULES?\s*:.*$', re.IGNORECASE | re.MULTILINE),
-    # Full-width corner-bracket tokens like 【...】, or half-width variants
     re.compile(r'【[^】]*】'),
     re.compile(r'⟦[^⟧]*⟧'),
-    # Stray template placeholders
     re.compile(r'\{\{[^}]*\}\}'),
+    re.compile(r'^\s*#{1,6}\s+', re.MULTILINE),
 ]
 
 
