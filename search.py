@@ -4,8 +4,7 @@ import time
 from threading import Semaphore
 from ddgs import DDGS
 import utils
-import gemini
-import prompts
+from ai import prompts
 import providers
 
 logger = utils.logger

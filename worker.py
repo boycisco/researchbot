@@ -12,7 +12,7 @@ import compare
 import package as pkg
 import writer
 import checker
-import prompts
+from ai import prompts
 import providers
 import confidence
 

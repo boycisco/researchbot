@@ -1,5 +1,5 @@
 import config
-import gemini
+from ai import gemini
 import search
 import fetch
 

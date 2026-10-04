@@ -1,7 +1,7 @@
 import logging
 import re
 import utils
-import prompts
+from ai import prompts
 import providers
 
 logger = utils.logger

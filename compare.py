@@ -1,7 +1,7 @@
 import logging
 from difflib import SequenceMatcher
 import utils
-import prompts
+from ai import prompts
 import providers
 
 logger = utils.logger

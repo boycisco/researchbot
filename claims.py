@@ -1,8 +1,7 @@
 import logging
 import json
 import utils
-import prompts
-import gemini
+from ai import prompts
 import providers
 
 logger = utils.logger
