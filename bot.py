@@ -7,8 +7,8 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import config
 import database
 import worker
-import format as fmt
-import history
+from ui import format as fmt
+from ui import history
 import utils
 
 logger = utils.logger
