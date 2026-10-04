@@ -228,24 +228,53 @@ Write the answer now.
 
 def checker_prompt(answer, package_content):
     return f"""
-You are a fact checker. Given the answer and the research package, verify if all factual claims in the answer are supported by the package.
+You are a strict fact checker. Your job is to verify every factual sentence in the answer against the research package.
 
-Answer:
+Answer to check:
 {answer}
 
 Research package (JSON):
 {package_content}
 
-Extract all factual claims from the answer. For each claim, determine if it is supported, partially supported, or unsupported by the research package.
-Return JSON:
+RULES:
+1. Split the answer into individual factual sentences. Ignore:
+   - Section headers (QUICK ANSWER, KEY FINDINGS, etc.)
+   - Citation markers like [1], [2, 3]
+   - Non-factual sentences (e.g., "This is complex.", "Let me explain.")
+
+2. For EACH factual sentence, classify it as exactly one of:
+   - "supported"            — the package contains evidence that directly supports it
+   - "partially_supported"  — the package supports part of it, but not all
+   - "unsupported"          — the package contains no evidence for it
+   - "contradicted"         — the package contains evidence that contradicts it
+   - "uncertain"            — the package's evidence is too weak or ambiguous to decide
+
+3. Compare ONLY against the package. Do NOT use outside knowledge.
+   If the sentence is true in the real world but not supported by the package,
+   classify it as "unsupported" — the rule is package support, not world truth.
+
+4. For every sentence that is NOT "supported", provide a short reason
+   quoting or paraphrasing the relevant part of the package (or its absence).
+
+5. Overall status:
+   - "passed"  if EVERY factual sentence is "supported"
+   - "failed"  if ANY sentence is "partially_supported", "unsupported", or "contradicted"
+   - "uncertain" is allowed and does not fail by itself, but report it.
+
+Return JSON in this exact format:
 {{
-  "status": "passed" or "failed",
-  "claims_checked": number,
-  "unsupported_claims": [{{"claim": "...", "reason": "..."}}],
-  "partially_supported_claims": [{{"claim": "...", "reason": "..."}}]
+  "status": "passed" | "failed",
+  "sentences_checked": <number>,
+  "findings": [
+    {{
+      "sentence": "<the exact sentence from the answer>",
+      "classification": "supported" | "partially_supported" | "unsupported" | "contradicted" | "uncertain",
+      "reason": "<short explanation; required unless classification is supported>"
+    }}
+  ]
 }}
-If there are no unsupported or partially supported claims, status should be "passed".
-Only JSON.
+
+Only JSON. No commentary outside the JSON.
 """
 
 def batch_verification_prompt(sources_text, research_context):
@@ -315,4 +344,46 @@ Only JSON.
 
 Sources:
 {sources_text}
+"""
+
+def revision_prompt(package_content, original_question, intent, problematic_findings):
+    findings_text = ""
+    for f in problematic_findings:
+        findings_text += (
+            f"- Sentence: {f['sentence']}\n"
+            f"  Classification: {f['classification']}\n"
+            f"  Reason: {f['reason']}\n\n"
+        )
+
+    return f"""
+You are revising a research answer that failed fact-checking.
+
+Original question: {original_question}
+Intent: {intent}
+
+Research package (JSON):
+{package_content}
+
+The following sentences in your previous answer were NOT fully supported by the package:
+
+{findings_text}
+
+Rewrite the entire answer so that:
+1. Every problematic sentence is either:
+   - removed, OR
+   - rewritten so it is supported by the package.
+2. Do NOT add new facts that are not in the package.
+3. Do NOT change sentences that were already supported.
+4. Keep the same section structure and citation rules as before.
+5. If a claim cannot be supported, simply do not include it.
+
+Return the full rewritten answer in plain text, using the same structure:
+QUICK ANSWER
+KEY FINDINGS
+DETAILED ANALYSIS
+CAVEATS AND LIMITATIONS
+CONCLUSION
+SOURCES
+
+Only the answer. No commentary.
 """

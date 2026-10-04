@@ -24,6 +24,17 @@ def build_package(research, sources, claims, relationships, queries):
             'relevance_score': s['relevance_score'],
         })
 
+    # Safety dedup: keep only the first occurrence of each canonical URL
+    _seen_canonical = set()
+    deduped_sources = []
+    for src in source_list:
+        key = src.get('canonical_url') or src.get('url')
+        if key in _seen_canonical:
+            continue
+        _seen_canonical.add(key)
+        deduped_sources.append(src)
+    source_list = deduped_sources
+
     # ---------- Search strategy ----------
     search_strategy = []
     for q in queries:

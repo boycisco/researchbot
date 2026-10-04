@@ -70,6 +70,9 @@ def normalize_url(url):
 
         scheme = (parsed.scheme or "https").lower()
         netloc = (parsed.netloc or "").lower()
+        # Strip leading "www." so https://www.example.com == https://example.com
+        if netloc.startswith("www."):
+            netloc = netloc[4:]
 
         path = parsed.path or "/"
         if len(path) > 1 and path.endswith("/"):

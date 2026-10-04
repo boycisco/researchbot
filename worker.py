@@ -226,6 +226,14 @@ def run_research(research_id, progress_callback=None):
             # Stage 9: Write answer
             send_progress('writing')
             update_research_status(research_id, status='writing', stage='writing')
+            try:
+                _pkg = json.loads(package_content)
+                logger.info(
+                    f"Package contains {len(_pkg.get('sources', []))} sources, "
+                    f"{len(_pkg.get('claims', []))} claims"
+                )
+            except Exception:
+                pass
             answer_text = writer.write_answer(package_content, topic, analysis.get('intent', ''))
             if not answer_text:
                 update_research_status(research_id, status='failed', stage='writing', error='Answer generation failed')
@@ -237,38 +245,83 @@ def run_research(research_id, progress_callback=None):
             send_progress('fact_checking')
             update_research_status(research_id, status='checking', stage='fact_checking')
             max_revisions = 2
+            final_verification_status = None
+
             for attempt in range(max_revisions + 1):
                 check_result = checker.check_answer(answer_text, package_content)
-                if check_result['status'] == 'passed':
-                    update_research_status(research_id, status='completed', stage='completed')
-                    store_answer(research_id, answer_text, 'verified')
-                    send_progress('completed')
-                    logger.info(f"Research {research_id} completed successfully")
-                    return
-                elif check_result['status'] == 'verification_error':
-                    update_research_status(research_id, status='failed', stage='fact_checking', error='Fact checker error')
+
+                if check_result['status'] == 'verification_error':
+                    update_research_status(
+                        research_id,
+                        status='failed',
+                        stage='fact_checking',
+                        error='Fact checker error',
+                    )
+                    store_answer(research_id, answer_text, 'verification_error')
                     send_progress('failed')
                     return
-                else:
-                    if attempt < max_revisions:
-                        logger.info(f"Fact check failed (attempt {attempt+1}), revising...")
-                        feedback = json.dumps(check_result.get('unsupported_claims', []))
-                        revision_prompt = prompts.writer_prompt(package_content, topic, analysis.get('intent', '')) + f"\n\nPrevious answer failed fact-check. Unsupported claims: {feedback}\nRevise the answer to only include supported information."
-                        result = providers.generate_text(revision_prompt)
-                        if result['success']:
-                            answer_text = result['text']
-                            store_answer(research_id, answer_text, 'revised')
-                        else:
-                            update_research_status(research_id, status='failed', stage='fact_checking', error='Revision failed')
-                            send_progress('failed')
-                            return
-                    else:
-                        update_research_status(research_id, status='failed', stage='fact_checking', error='Fact check failed after max revisions')
+
+                if check_result['status'] == 'passed':
+                    logger.info(
+                        f"Fact check passed: {check_result['sentences_checked']} sentence(s) checked, "
+                        f"0 problematic"
+                    )
+                    final_verification_status = 'verified'
+                    break
+
+                logger.info(
+                    f"Fact check returned status={check_result['status']}, "
+                    f"checked={check_result['sentences_checked']}, "
+                    f"problematic={len(check_result['problematic'])}"
+                )
+
+                # Failed — try to revise
+                if attempt < max_revisions:
+                    logger.info(
+                        f"Fact check failed (attempt {attempt+1}); "
+                        f"{len(check_result['problematic'])} problematic sentence(s)"
+                    )
+                    revision_prompt = prompts.revision_prompt(
+                        package_content,
+                        topic,
+                        analysis.get('intent', ''),
+                        check_result['problematic'],
+                    )
+                    revision_result = providers.generate_text(revision_prompt)
+                    if not revision_result['success']:
+                        update_research_status(
+                            research_id,
+                            status='failed',
+                            stage='fact_checking',
+                            error='Revision generation failed',
+                        )
+                        store_answer(research_id, answer_text, 'revision_failed')
                         send_progress('failed')
                         return
+                    answer_text = writer.clean_answer(revision_result['text'])
+                    store_answer(research_id, answer_text, 'revised')
+                    logger.info(f"Revision {attempt+1} produced a new answer")
+                else:
+                    logger.warning(f"Fact check still failing after {max_revisions} revisions")
+                    final_verification_status = 'fact_check_failed'
 
-            update_research_status(research_id, status='failed', stage='fact_checking', error='Unexpected exit')
+            if final_verification_status == 'verified':
+                update_research_status(research_id, status='completed', stage='completed')
+                store_answer(research_id, answer_text, 'verified')
+                send_progress('completed')
+                logger.info(f"Research {research_id} completed successfully")
+                return
+
+            # Reached here: still failing after revisions
+            update_research_status(
+                research_id,
+                status='failed',
+                stage='fact_checking',
+                error='Fact check failed after max revisions',
+            )
+            store_answer(research_id, answer_text, 'fact_check_failed')
             send_progress('failed')
+            return
 
         except Exception as e:
             logger.exception(f"Research {research_id} failed with exception")
