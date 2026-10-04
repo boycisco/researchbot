@@ -5,8 +5,8 @@ import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import config
-import database
-import worker
+from core import database
+from core import worker
 from ui import format as fmt
 from ui import history
 import utils

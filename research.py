@@ -1,7 +1,7 @@
 import logging
 import utils
-from database import get_or_create_user, create_research
-import worker
+from core.database import get_or_create_user, create_research
+from core import worker
 
 logger = utils.logger
 

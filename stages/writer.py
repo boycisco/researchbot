@@ -2,7 +2,7 @@ import logging
 import re
 import utils
 from ai import prompts
-import providers
+from core import providers
 
 logger = utils.logger
 

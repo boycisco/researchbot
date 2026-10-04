@@ -5,7 +5,7 @@ from threading import Semaphore
 from ddgs import DDGS
 import utils
 from ai import prompts
-import providers
+from core import providers
 
 logger = utils.logger
 

@@ -3,7 +3,7 @@ import threading
 import time
 import json
 import utils
-from database import *
+from core.database import *
 from stages import search
 from stages import fetch
 from stages import verify
@@ -11,10 +11,10 @@ from stages import claims
 from stages import compare
 from stages import writer
 from stages import checker
-import package as pkg
+from core import package as pkg
 from ai import prompts
-import providers
-import confidence
+from core import providers
+from core import confidence
 
 logger = utils.logger
 

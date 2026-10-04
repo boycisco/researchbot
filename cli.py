@@ -2,7 +2,7 @@ import sys
 import time
 from request import ResearchRequest
 import research
-import database
+from core import database
 
 def main():
     if len(sys.argv) < 2:

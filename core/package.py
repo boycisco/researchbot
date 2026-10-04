@@ -1,7 +1,7 @@
 import json
 import logging
 import utils
-from database import get_sources_for_research, get_claims, get_relationships
+from core.database import get_sources_for_research, get_claims, get_relationships
 
 logger = utils.logger
 
