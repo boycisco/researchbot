@@ -14,6 +14,7 @@ import writer
 import checker
 import prompts
 import providers
+import confidence
 
 logger = utils.logger
 
@@ -197,6 +198,17 @@ def run_research(research_id, progress_callback=None):
                 f"{len(classified['different_contexts'])} different context, "
                 f"{len(classified['qualifiers'])} qualifiers)"
             )
+
+            # Stage 7b: Deterministic confidence scoring
+            send_progress('confidence')
+            update_research_status(research_id, status='scoring', stage='confidence')
+            sources_by_id = {s['id']: s for s in verified_sources}
+            for c in claims_rows:
+                conf = confidence.compute_confidence(c, claims_rows, relationships_rows, sources_by_id)
+                update_claim_confidence(c['id'], conf['score'], conf['level'], conf['explanation'])
+            # Refresh from DB so packaging sees the new fields
+            claims_rows = get_claims(research_id)
+            logger.info("Computed confidence for all claims")
 
             # Stage 8: Build package
             send_progress('packaging')

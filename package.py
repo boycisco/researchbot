@@ -57,19 +57,26 @@ def build_package(research, sources, claims, relationships):
         'user_question': research['topic'],
         'research_intent': research['intent'] or '',
         'main_topic': research['topic'],
-        'key_findings': [c['claim'] for c in claims if c['confidence'] > 70][:5],
+        'key_findings': [
+            c['claim'] for c in claims
+            if (c['confidence_score'] or 0) >= 70
+        ][:5],
         'claims': [{
             'id': c['id'],
             'claim': c['claim'],
+            'claim_type': c['claim_type'],
             'evidence': c['evidence'],
             'source_id': c['source_id'],
-            'confidence': c['confidence']
+            'ai_confidence': c['confidence'],
+            'confidence_score': c['confidence_score'],
+            'confidence_level': c['confidence_level'],
+            'confidence_explanation': c['confidence_explanation'],
         } for c in claims],
-        'statistics': statistics,
+        'statistics':         statistics,
         'contradictions':     contradictions,
         'different_contexts': different_contexts,
         'qualifiers':         qualifiers,
-        'limitations': limitations,
-        'sources': source_list
+        'limitations':        limitations,
+        'sources':            source_list,
     }
     return json.dumps(package, indent=2)

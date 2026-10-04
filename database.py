@@ -25,6 +25,9 @@ def init_db():
             ("source_lineage",     "ALTER TABLE sources ADD COLUMN source_lineage TEXT"),
             ("bias_score",         "ALTER TABLE sources ADD COLUMN bias_score REAL"),
             ("completeness_score", "ALTER TABLE sources ADD COLUMN completeness_score REAL"),
+            ("confidence_score",       "ALTER TABLE claims ADD COLUMN confidence_score REAL"),
+            ("confidence_level",       "ALTER TABLE claims ADD COLUMN confidence_level TEXT"),
+            ("confidence_explanation", "ALTER TABLE claims ADD COLUMN confidence_explanation TEXT"),
         ]
 
         for column_name, sql in migrations:
@@ -196,6 +199,15 @@ def insert_claim(research_id, source_id, claim_data):
 def get_claims(research_id):
     with get_connection() as conn:
         return conn.execute("SELECT * FROM claims WHERE research_id=?", (research_id,)).fetchall()
+
+def update_claim_confidence(claim_id, score, level, explanation):
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE claims SET confidence_score=?, confidence_level=?, confidence_explanation=? WHERE id=?",
+            (score, level, explanation, claim_id)
+        )
+        conn.commit()
+
 
 # Relationship helpers
 def insert_relationship(research_id, claim_a, claim_b, rel_data):

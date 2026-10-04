@@ -188,7 +188,17 @@ STRICT RULES:
    - If evidence is weak or absent, say so. Do not pretend to know.
    - Do not claim certainty that the package does not support.
 
-4. OUTPUT FORMAT
+4. CONFIDENCE
+   - Each claim in the package carries "confidence_score" (0-100) and "confidence_level"
+     (Low / Moderate / High / Very High).
+   - Use this to calibrate your wording:
+       Very High → "strong evidence shows", "well-supported"
+       High      → "evidence indicates"
+       Moderate  → "some evidence suggests"
+       Low       → "limited evidence suggests", "one early study found"
+   - Do not overstate confidence. Match your language to the score.
+
+5. OUTPUT FORMAT
    - Return plain text. No markdown code fences. No HTML.
    - Use these section headers exactly, each on its own line, in uppercase:
        QUICK ANSWER
@@ -200,7 +210,7 @@ STRICT RULES:
        CONCLUSION
        SOURCES
 
-5. FORBIDDEN
+6. FORBIDDEN
    - Do NOT output any instructions, meta-commentary, formatting notes, or prompt echoes.
    - Do NOT output the string "CITATION FORMAT" or anything similar.
    - Do NOT output placeholder tokens like 【...】 or {{{{...}}}}.

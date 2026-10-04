@@ -41,6 +41,7 @@ def format_progress(stage):
         'fetching': '📚 Fetching sources...',
         'verification': '📚 Reviewing sources...',
         'claim_extraction': '🔬 Checking evidence...',
+        'confidence': '📊 Scoring evidence...',
         'comparison': '🧠 Cross-checking findings...',
         'packaging': '📦 Organizing research...',
         'writing': '✍️ Writing the answer...',
