@@ -22,8 +22,12 @@ logger = utils.logger
 research_semaphore = threading.Semaphore(5)  # max concurrent research jobs
 fetch_semaphore = threading.Semaphore(5)     # max concurrent fetches
 
-def run_research(research_id, progress_callback=None):
+def run_research(research_id, progress_callback=None, profile=None):
     """Main orchestration function for a research job. Runs in a separate thread."""
+    if profile is None:
+        from request import DEPTH_PROFILES
+        profile = DEPTH_PROFILES["standard"]
+
     with research_semaphore:
         try:
             logger.info(f"Starting research {research_id}")
@@ -58,7 +62,10 @@ def run_research(research_id, progress_callback=None):
             # Stage 2: Query generation
             send_progress('query_generation')
             update_research_status(research_id, status='planning', stage='query_generation')
-            queries = search.generate_queries(json.dumps(analysis), max_queries=8)
+            queries = search.generate_queries(
+                json.dumps(analysis),
+                max_queries=profile['max_queries'],
+            )
             if queries is None or len(queries) == 0:
                 update_research_status(research_id, status='failed', stage='query_generation', error='No queries generated')
                 send_progress('failed')
@@ -80,7 +87,10 @@ def run_research(research_id, progress_callback=None):
                     update_research_status(research_id, status='cancelled', stage='search')
                     send_progress('cancelled')
                     return
-                results = providers.search_web(q['query'], max_results=5)
+                results = providers.search_web(
+                    q['query'],
+                    max_results=profile['max_search_results_per_query'],
+                )
                 for result in results:
                     canonical = result.get('canonical_url') or result.get('url')
                     if not any(
@@ -100,6 +110,7 @@ def run_research(research_id, progress_callback=None):
             # Stage 4: Fetch sources (bounded concurrency)
             send_progress('fetching')
             update_research_status(research_id, status='fetching', stage='fetching')
+            all_sources = all_sources[:profile['max_sources_to_fetch']]
             for source in all_sources:
                 if is_cancel_requested(research_id):
                     update_research_status(research_id, status='cancelled', stage='fetching')
@@ -120,12 +131,18 @@ def run_research(research_id, progress_callback=None):
                     })
 
             # Limit to top 5 sources with content
-            sources_with_content = [s for s in all_sources if 'content' in s and s['content']][:5]
+            sources_with_content = [
+                s for s in all_sources
+                if 'content' in s and s['content']
+            ][:profile['max_sources_to_verify']]
             if not sources_with_content:
                 update_research_status(research_id, status='failed', stage='fetching', error='No sources fetched successfully')
                 send_progress('failed')
                 return
-            logger.info(f"Fetched content from {len(sources_with_content)} sources (limited to top 5)")
+            logger.info(
+                f"Fetched content from {len(sources_with_content)} sources "
+                f"(depth={profile.get('max_sources_to_verify')})"
+            )
 
             # Stage 5: Verify sources (batch)
             send_progress('verification')
@@ -181,7 +198,10 @@ def run_research(research_id, progress_callback=None):
             send_progress('comparison')
             update_research_status(research_id, status='comparing', stage='comparison')
             claims_rows = get_claims(research_id)
-            candidate_pairs = compare.find_candidate_pairs(claims_rows)
+            candidate_pairs = compare.find_candidate_pairs(
+                claims_rows,
+                max_pairs=profile['max_claim_pairs'],
+            )
             for claim_a, claim_b, sim in candidate_pairs:
                 if is_cancel_requested(research_id):
                     update_research_status(research_id, status='cancelled', stage='comparison')
@@ -219,6 +239,7 @@ def run_research(research_id, progress_callback=None):
                 claims_rows,
                 relationships_rows,
                 query_rows,
+                min_confidence_for_key_findings=profile['min_confidence_for_key_findings'],
             )
             store_package(research_id, package_content)
             logger.info("Package built")
@@ -244,7 +265,7 @@ def run_research(research_id, progress_callback=None):
             # Stage 10: Fact check and revision loop
             send_progress('fact_checking')
             update_research_status(research_id, status='checking', stage='fact_checking')
-            max_revisions = 2
+            max_revisions = profile['max_revisions']
             final_verification_status = None
 
             for attempt in range(max_revisions + 1):
@@ -329,8 +350,12 @@ def run_research(research_id, progress_callback=None):
             if progress_callback:
                 progress_callback(research_id, 'failed')
 
-def start_research(research_id, progress_callback=None):
-    """Start research in a separate thread, passing the callback."""
-    thread = threading.Thread(target=run_research, args=(research_id, progress_callback), daemon=True)
+def start_research(research_id, progress_callback=None, profile=None):
+    """Start research in a separate thread, passing the callback and profile."""
+    thread = threading.Thread(
+        target=run_research,
+        args=(research_id, progress_callback, profile),
+        daemon=True,
+    )
     thread.start()
     return thread

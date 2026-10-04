@@ -5,7 +5,8 @@ from core.database import get_sources_for_research, get_claims, get_relationship
 
 logger = utils.logger
 
-def build_package(research, sources, claims, relationships, queries):
+def build_package(research, sources, claims, relationships, queries,
+                  min_confidence_for_key_findings=70):
     """Build a research package JSON string from verified data."""
     verified_sources = [s for s in sources if s['verification_status'] == 'verified']
 
@@ -95,7 +96,7 @@ def build_package(research, sources, claims, relationships, queries):
 
         'key_findings': [
             c['claim'] for c in claims
-            if (c['confidence_score'] or 0) >= 70
+            if (c['confidence_score'] or 0) >= min_confidence_for_key_findings
         ][:5],
 
         'claims': [{

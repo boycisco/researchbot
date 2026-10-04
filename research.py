@@ -5,6 +5,7 @@ from core import worker
 
 logger = utils.logger
 
+
 def research(request, user_telegram_id: str, progress_callback=None):
     """
     Create a research job from a ResearchRequest and start it.
@@ -17,13 +18,13 @@ def research(request, user_telegram_id: str, progress_callback=None):
     Returns:
         research_id (int)
     """
-    # Get or create the user in DB
     user_id = get_or_create_user(user_telegram_id)
-
-    # Create the research job
     research_id = create_research(user_id, request.topic)
 
-    # Start the worker, passing the research_id and callback
-    worker.start_research(research_id, progress_callback)
+    worker.start_research(
+        research_id,
+        progress_callback,
+        profile=request.profile(),
+    )
 
     return research_id

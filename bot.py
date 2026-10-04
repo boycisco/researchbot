@@ -20,18 +20,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def research_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /research command with optional topic."""
-    user = update.effective_user
-    telegram_id = str(user.id)
-    # Check if there is an argument
-    if context.args:
-        topic = ' '.join(context.args)
-        await start_new_research(update, context, topic)
-    else:
-        # Ask for topic
-        await update.message.reply_text("Please send me your research topic.")
-        # Set state to await topic
+    """Handle /research command with optional depth flag."""
+    if not context.args:
+        telegram_id = str(update.effective_user.id)
         database.set_user_state(telegram_id, 'awaiting_topic')
+        await update.message.reply_text(
+            "Send me your research topic.\n"
+            "You can also choose depth: /research --quick <topic>, "
+            "/research --deep <topic>, /research --exhaustive <topic>"
+        )
+        return
+
+    args = list(context.args)
+    depth = "standard"
+    if args and args[0].startswith("--"):
+        flag = args[0].lstrip("-").lower()
+        if flag in ("quick", "standard", "deep", "exhaustive"):
+            depth = flag
+            args = args[1:]
+        else:
+            await update.message.reply_text(f"Unknown depth: {args[0]}")
+            return
+
+    topic = " ".join(args).strip()
+    if not topic:
+        await update.message.reply_text("Topic cannot be empty.")
+        return
+
+    await start_new_research(update, context, topic, depth=depth)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle regular messages (for pending topics)."""
@@ -42,22 +58,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         topic = update.message.text.strip()
         if topic:
             database.clear_user_state(telegram_id)
-            await start_new_research(update, context, topic)
+            await start_new_research(update, context, topic, depth="standard")
         else:
             await update.message.reply_text("Please send a valid topic.")
     # else ignore
 
-async def start_new_research(update, context, topic):
+async def start_new_research(update, context, topic, depth="standard"):
     """Create a research job and start worker with progress callback."""
     user = update.effective_user
     telegram_id = str(user.id)
 
     # Build a ResearchRequest with defaults
-    request = ResearchRequest(topic=topic)
+    request = ResearchRequest(topic=topic, depth=depth)
 
     # Send initial message and keep a reference to it
     progress_message = await update.message.reply_text(
-        f"🔎 Research started (ID: pending)...\nStatus: initializing..."
+        f"🔎 Research started ({depth} depth)...\nStatus: initializing..."
     )
 
     # Capture the running event loop (main thread)
@@ -81,7 +97,7 @@ async def start_new_research(update, context, topic):
 
     # Update the initial message with the actual research ID
     await progress_message.edit_text(
-        f"🔎 Research {research_id} status:\n{fmt.format_progress('analysis')}"
+        f"🔎 Research {research_id} ({depth} depth):\n{fmt.format_progress('analysis')}"
     )
 
 async def history_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
