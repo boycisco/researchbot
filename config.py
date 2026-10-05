@@ -16,7 +16,7 @@ if not GEMINI_API_KEY:
 MAX_RESEARCH_JOBS    = int(os.getenv("MAX_RESEARCH_JOBS", 3))
 MAX_SOURCE_FETCHES   = int(os.getenv("MAX_SOURCE_FETCHES", 5))
 MAX_SEARCHES         = int(os.getenv("MAX_SEARCHES", 5))
-MAX_AI_REQUESTS      = int(os.getenv("MAX_AI_REQUESTS", 10))    # AI calls per minute
+MAX_AI_REQUESTS      = int(os.getenv("MAX_AI_REQUESTS", 4))     # AI calls per minute
 AI_REQUEST_TIMEOUT_S = int(os.getenv("AI_REQUEST_TIMEOUT_S", 30))  # per AI call, seconds
 
 # Jobs left in an active state for longer than this (in minutes)
@@ -30,6 +30,6 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
 SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "duckduckgo")
 
 # Gemini model settings
-GEMINI_MODEL = "gemini-3.1-flash-lite"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_TEMPERATURE = 0.2
 GEMINI_MAX_OUTPUT_TOKENS = 4096

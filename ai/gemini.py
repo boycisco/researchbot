@@ -2,6 +2,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 import google.generativeai as genai
+import concurrent.futures
 import json
 import re
 import time
@@ -59,7 +60,8 @@ def _classify_error(error_str):
     low = error_str.lower()
     if "429" in error_str or "quota" in low or "rate limit" in low:
         return "rate_limit", True
-    if "timeout" in low or "deadline" in low or "timed out" in low:
+    if ("timeout" in low or "deadline" in low or "timed out" in low
+            or "exceeded" in low):
         return "timeout", True
     if "500" in error_str or "502" in error_str or "503" in error_str or "504" in error_str:
         return "server_error", True
@@ -67,6 +69,55 @@ def _classify_error(error_str):
         return "client_error", False
     return "unknown", False
 
+
+def _parse_retry_delay(error_str, default=10):
+    """
+    Extract the retry delay from a Google API error string.
+    Google provides it in two forms:
+        "Please retry in 31.648219527s."
+        "retry_delay { seconds: 31 }"
+    Return the larger of what we find, or `default`.
+    """
+    # Form 1: "retry in X.Ys"
+    m = re.search(r"retry in (\d+(?:\.\d+)?)s", error_str)
+    if m:
+        return float(m.group(1))
+    # Form 2: "retry_delay { seconds: N }"
+    m = re.search(r"seconds:\s*(\d+)", error_str)
+    if m:
+        return float(m.group(1))
+    return default
+
+
+def _call_sdk(prompt, temperature, max_output_tokens):
+    """Raw SDK call. Runs in a helper thread so we can enforce a timeout."""
+    return model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            temperature=temperature if temperature is not None else GEMINI_TEMPERATURE,
+            max_output_tokens=max_output_tokens if max_output_tokens else GEMINI_MAX_OUTPUT_TOKENS,
+        ),
+    )
+
+
+def _call_with_timeout(prompt, temperature, max_output_tokens, timeout_s):
+    """
+    Run the SDK call in a separate thread. If it doesn't return within
+    timeout_s, abandon it and raise TimeoutError.
+
+    The abandoned thread keeps running in the background until the SDK
+    call finishes; Python cleans it up when the process exits.
+    """
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(_call_sdk, prompt, temperature, max_output_tokens)
+    try:
+        result = future.result(timeout=timeout_s)
+        executor.shutdown(wait=False)
+        return result
+    except concurrent.futures.TimeoutError:
+        logger.warning(f"[ai] SDK call exceeded {timeout_s}s; abandoning thread")
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise TimeoutError(f"AI call exceeded {timeout_s}s")
 
 # --- Core call ----------------------------------------------------------
 
@@ -77,13 +128,8 @@ def _generate_with_retry(prompt, temperature=None, max_output_tokens=None,
 
         start = time.time()
         try:
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=temperature if temperature is not None else GEMINI_TEMPERATURE,
-                    max_output_tokens=max_output_tokens if max_output_tokens else GEMINI_MAX_OUTPUT_TOKENS,
-                ),
-                request_options={"timeout": AI_REQUEST_TIMEOUT_S},
+            response = _call_with_timeout(
+                prompt, temperature, max_output_tokens, AI_REQUEST_TIMEOUT_S
             )
             duration = time.time() - start
             logger.info(f"[ai] call ok attempt={attempt+1} duration={duration:.1f}s json={is_json}")
@@ -113,10 +159,13 @@ def _generate_with_retry(prompt, temperature=None, max_output_tokens=None,
             kind, retriable = _classify_error(error_str)
 
             if retriable and attempt < retries - 1:
-                wait_time = min(2 ** attempt * 5, 60)  # 5, 10, 20, capped at 60
+                if kind == "rate_limit":
+                    wait_time = _parse_retry_delay(error_str, default=30) + 2
+                else:
+                    wait_time = min(2 ** attempt * 5, 60)
                 logger.warning(
                     f"[ai] {kind} (attempt {attempt+1}, duration={duration:.1f}s); "
-                    f"retrying in {wait_time}s"
+                    f"retrying in {wait_time:.1f}s"
                 )
                 time.sleep(wait_time)
                 continue

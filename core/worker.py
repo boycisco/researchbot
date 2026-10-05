@@ -23,6 +23,11 @@ logger = utils.logger
 research_semaphore = threading.Semaphore(config.MAX_RESEARCH_JOBS)
 fetch_semaphore    = threading.Semaphore(config.MAX_SOURCE_FETCHES)
 
+def _log_stage(stage_name, research_id, start_time):
+    duration = time.time() - start_time
+    logger.info(f"[stage] research={research_id} stage={stage_name} duration={duration:.1f}s")
+
+
 def run_research(research_id, progress_callback=None, profile=None):
     """Main orchestration function for a research job. Runs in a separate thread."""
     if profile is None:
@@ -30,6 +35,7 @@ def run_research(research_id, progress_callback=None, profile=None):
         profile = DEPTH_PROFILES["standard"]
 
     with research_semaphore:
+        _overall_start = time.time()
         try:
             logger.info(f"Starting research {research_id}")
             research = get_research(research_id)
@@ -53,6 +59,7 @@ def run_research(research_id, progress_callback=None, profile=None):
                 return False
 
             # Stage 1: Analysis
+            _t = time.time()
             send_progress('analysis')
             update_research_status(research_id, status='analyzing', stage='analysis')
             analysis_result = providers.generate_json(prompts.analysis_prompt(topic))
@@ -63,11 +70,13 @@ def run_research(research_id, progress_callback=None, profile=None):
             analysis = analysis_result['data']
             update_research_status(research_id, intent=analysis.get('intent', ''))
             logger.info(f"Analysis done: {analysis.get('main_topic')}")
+            _log_stage('analysis', research_id, _t)
 
             if check_cancelled('analysis'):
                 return
 
             # Stage 2: Query generation
+            _t = time.time()
             send_progress('query_generation')
             update_research_status(research_id, status='planning', stage='query_generation')
             queries = search.generate_queries(
@@ -85,8 +94,10 @@ def run_research(research_id, progress_callback=None, profile=None):
                 send_progress('failed')
                 return
             logger.info(f"Generated {len(query_rows)} queries")
+            _log_stage('query_generation', research_id, _t)
 
             # Stage 3: Search
+            _t = time.time()
             send_progress('search')
             update_research_status(research_id, status='searching', stage='search')
             all_sources = []
@@ -112,8 +123,10 @@ def run_research(research_id, progress_callback=None, profile=None):
                 send_progress('failed')
                 return
             logger.info(f"Found {len(all_sources)} sources")
+            _log_stage('search', research_id, _t)
 
             # Stage 4: Fetch sources (bounded concurrency)
+            _t = time.time()
             send_progress('fetching')
             update_research_status(research_id, status='fetching', stage='fetching')
             all_sources = all_sources[:profile['max_sources_to_fetch']]
@@ -147,11 +160,13 @@ def run_research(research_id, progress_callback=None, profile=None):
                 f"Fetched content from {len(sources_with_content)} sources "
                 f"(depth={profile.get('max_sources_to_verify')})"
             )
+            _log_stage('fetching', research_id, _t)
 
             if check_cancelled('pre_verification'):
                 return
 
             # Stage 5: Verify sources (batch)
+            _t = time.time()
             send_progress('verification')
             update_research_status(research_id, status='verifying', stage='verification')
             verified_results = verify.verify_sources(sources_with_content, topic)
@@ -182,11 +197,13 @@ def run_research(research_id, progress_callback=None, profile=None):
                 return
             verified_sources = [s for s in sources_with_content if s.get('verification_status') == 'verified']
             logger.info(f"Verified {verified_count} sources")
+            _log_stage('verification', research_id, _t)
 
             if check_cancelled('pre_claim_extraction'):
                 return
 
             # Stage 6: Extract claims (batch)
+            _t = time.time()
             send_progress('claim_extraction')
             update_research_status(research_id, status='extracting', stage='claim_extraction')
             extracted_claims = claims.extract_claims_batch(
@@ -203,8 +220,10 @@ def run_research(research_id, progress_callback=None, profile=None):
                 claim_data['source_url'] = next((s['url'] for s in verified_sources if s['id'] == claim_data['source_id']), '')
             all_claims = extracted_claims
             logger.info(f"Extracted {len(all_claims)} claims")
+            _log_stage('claim_extraction', research_id, _t)
 
             # Stage 7: Compare claims
+            _t = time.time()
             send_progress('comparison')
             update_research_status(research_id, status='comparing', stage='comparison')
             claims_rows = get_claims(research_id)
@@ -226,8 +245,10 @@ def run_research(research_id, progress_callback=None, profile=None):
                 f"{len(classified['different_contexts'])} different context, "
                 f"{len(classified['qualifiers'])} qualifiers)"
             )
+            _log_stage('comparison', research_id, _t)
 
             # Stage 7b: Deterministic confidence scoring
+            _t = time.time()
             send_progress('confidence')
             update_research_status(research_id, status='scoring', stage='confidence')
             sources_by_id = {s['id']: s for s in verified_sources}
@@ -237,8 +258,10 @@ def run_research(research_id, progress_callback=None, profile=None):
             # Refresh from DB so packaging sees the new fields
             claims_rows = get_claims(research_id)
             logger.info("Computed confidence for all claims")
+            _log_stage('confidence', research_id, _t)
 
             # Stage 8: Build package
+            _t = time.time()
             send_progress('packaging')
             update_research_status(research_id, status='packaging', stage='packaging')
             package_content = pkg.build_package(
@@ -251,11 +274,13 @@ def run_research(research_id, progress_callback=None, profile=None):
             )
             store_package(research_id, package_content)
             logger.info("Package built")
+            _log_stage('packaging', research_id, _t)
 
             if check_cancelled('pre_writing'):
                 return
 
             # Stage 9: Write answer
+            _t = time.time()
             send_progress('writing')
             update_research_status(research_id, status='writing', stage='writing')
             try:
@@ -272,11 +297,13 @@ def run_research(research_id, progress_callback=None, profile=None):
                 send_progress('failed')
                 return
             store_answer(research_id, answer_text, 'unverified')
+            _log_stage('writing', research_id, _t)
 
             if check_cancelled('pre_fact_checking'):
                 return
 
             # Stage 10: Fact check and revision loop
+            _t = time.time()
             send_progress('fact_checking')
             update_research_status(research_id, status='checking', stage='fact_checking')
             max_revisions = profile['max_revisions']
@@ -341,6 +368,8 @@ def run_research(research_id, progress_callback=None, profile=None):
                 else:
                     logger.warning(f"Fact check still failing after {max_revisions} revisions")
                     final_verification_status = 'fact_check_failed'
+
+            _log_stage('fact_checking', research_id, _t)
 
             if final_verification_status == 'verified':
                 update_research_status(research_id, status='completed', stage='completed')
