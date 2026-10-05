@@ -104,6 +104,71 @@ def compare_claims(claim_a, claim_b):
     }
 
 
+def compare_claims_batch(pairs):
+    """
+    Classify multiple claim pairs in a single AI call.
+
+    pairs: list of (claim_a, claim_b, score) tuples (as returned by
+           find_candidate_pairs).
+
+    Returns a list aligned with `pairs`, where each entry is either:
+      - a dict {'relationship', 'reason', 'confidence'} on success
+      - None on failure to classify
+
+    If the batch AI call fails, all entries are None.
+    """
+    if not pairs:
+        return []
+
+    # Build prompt input
+    prompt_pairs = []
+    for idx, (a, b, _score) in enumerate(pairs):
+        prompt_pairs.append({
+            "index": idx,
+            "claim_a": _get(a, 'claim', ''),
+            "claim_b": _get(b, 'claim', ''),
+            "evidence_a": _get(a, 'evidence', '') or '',
+            "evidence_b": _get(b, 'evidence', '') or '',
+        })
+
+    prompt = prompts.batch_comparison_prompt(prompt_pairs)
+    result = providers.generate_json(prompt)
+
+    if not result['success']:
+        logger.error(f"Batch comparison failed: {result.get('error')}")
+        return [None] * len(pairs)
+
+    data = result['data']
+    allowed = {
+        "supports", "partially_supports", "contradicts",
+        "qualifies", "different_context", "related", "unrelated"
+    }
+
+    # Map results by pair index
+    by_index = {}
+    for item in data.get("relationships", []):
+        if not isinstance(item, dict):
+            continue
+        idx = item.get("pair")
+        if not isinstance(idx, int):
+            continue
+        rel = str(item.get("relationship", "related")).lower()
+        if rel not in allowed:
+            rel = "related"
+        try:
+            conf = float(item.get("confidence", 50))
+        except (TypeError, ValueError):
+            conf = 50.0
+        by_index[idx] = {
+            "relationship": rel,
+            "reason": item.get("context_notes", "") or "",
+            "confidence": conf,
+        }
+
+    # Align with input order; anything missing is None
+    return [by_index.get(i) for i in range(len(pairs))]
+
+
 def detect_contradictions(claims, relationships):
     """
     Classify stored relationships into three buckets:

@@ -23,6 +23,7 @@ logger = utils.logger
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel(GEMINI_MODEL)
 
+MAX_RETRY_WAIT_S = 120   # never sleep longer than this; if Google wants more, fail
 
 # --- Rate limiter --------------------------------------------------------
 
@@ -160,7 +161,14 @@ def _generate_with_retry(prompt, temperature=None, max_output_tokens=None,
 
             if retriable and attempt < retries - 1:
                 if kind == "rate_limit":
-                    wait_time = _parse_retry_delay(error_str, default=30) + 2
+                    raw_wait = _parse_retry_delay(error_str, default=30) + 2
+                    if raw_wait > MAX_RETRY_WAIT_S:
+                        logger.error(
+                            f"[ai] rate limit suggests waiting {raw_wait:.0f}s "
+                            f"(>{MAX_RETRY_WAIT_S}s cap). Daily quota likely exhausted."
+                        )
+                        return {"success": False, "error": f"quota_exhausted: {error_str[:300]}"}
+                    wait_time = raw_wait
                 else:
                     wait_time = min(2 ** attempt * 5, 60)
                 logger.warning(

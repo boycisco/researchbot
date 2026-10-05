@@ -154,6 +154,61 @@ Return JSON:
 Only JSON.
 """
 
+def batch_comparison_prompt(pairs):
+    """
+    pairs: list of dicts with keys:
+        index, claim_a, claim_b, evidence_a, evidence_b
+    """
+    listing = ""
+    for p in pairs:
+        listing += (
+            f"\n--- Pair {p['index']} ---\n"
+            f"Claim A: {p['claim_a']}\n"
+            f"Evidence A: {p['evidence_a'][:300]}\n"
+            f"Claim B: {p['claim_b']}\n"
+            f"Evidence B: {p['evidence_b'][:300]}\n"
+        )
+
+    return f"""
+You are comparing multiple pairs of claims drawn from different sources.
+For each pair, classify the relationship between Claim A and Claim B.
+
+Allowed relationships:
+  supports            — B provides independent evidence that A is true
+  partially_supports  — B supports part of A but not all
+  contradicts         — A and B cannot both be true (same subject, timeframe,
+                        population, opposite conclusion)
+  qualifies           — B is true only under specific conditions that narrow A
+  different_context   — A and B appear to conflict but refer to different
+                        populations, definitions, timeframes, or methodologies
+  related             — same topic, neither agreeing nor disagreeing
+  unrelated           — different topics
+
+Rules:
+  - Be strict with "contradicts". Only use it for genuine disagreement
+    on the same subject/timeframe/population.
+  - Do NOT use "contradicts" when the difference is population, timeframe,
+    methodology, or definitions. Use "different_context" instead.
+  - Do NOT invent facts.
+
+For each pair, produce one entry with:
+  - pair: the pair index (0, 1, 2, ...)
+  - relationship: one of the values above
+  - context_notes: short explanation (1-3 sentences)
+  - confidence: 0-100
+
+Return JSON only:
+{{
+  "relationships": [
+    {{"pair": 0, "relationship": "...", "context_notes": "...", "confidence": 80}},
+    {{"pair": 1, "relationship": "...", "context_notes": "...", "confidence": 75}}
+  ]
+}}
+
+Pairs to classify:
+{listing}
+"""
+
 def writer_prompt(package_content, original_question, intent):
     return f"""
 You are a research writer. Write a concise, evidence-based answer to the user's question.

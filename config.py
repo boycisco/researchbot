@@ -33,3 +33,8 @@ SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "duckduckgo")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_TEMPERATURE = 0.2
 GEMINI_MAX_OUTPUT_TOKENS = 4096
+
+# Comparison mode: "batch" = one AI call for all claim pairs (fewer requests,
+# may lose per-pair nuance). "per_pair" = one AI call per pair (more requests,
+# finer classification).
+COMPARE_MODE = os.getenv("COMPARE_MODE", "batch")

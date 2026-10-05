@@ -231,12 +231,27 @@ def run_research(research_id, progress_callback=None, profile=None):
                 claims_rows,
                 max_pairs=profile['max_claim_pairs'],
             )
-            for claim_a, claim_b, sim in candidate_pairs:
+            if candidate_pairs:
                 if check_cancelled('comparison'):
                     return
-                rel_result = compare.compare_claims(claim_a, claim_b)
-                if rel_result:
-                    insert_relationship(research_id, claim_a['id'], claim_b['id'], rel_result)
+                if config.COMPARE_MODE == "per_pair":
+                    logger.info(f"Comparing {len(candidate_pairs)} pairs one-by-one")
+                    for claim_a, claim_b, _sim in candidate_pairs:
+                        if check_cancelled('comparison'):
+                            return
+                        rel_result = compare.compare_claims(claim_a, claim_b)
+                        if rel_result:
+                            insert_relationship(
+                                research_id, claim_a['id'], claim_b['id'], rel_result
+                            )
+                else:
+                    logger.info(f"Comparing {len(candidate_pairs)} pairs in a single batch")
+                    batch_results = compare.compare_claims_batch(candidate_pairs)
+                    for (claim_a, claim_b, _sim), rel_result in zip(candidate_pairs, batch_results):
+                        if rel_result:
+                            insert_relationship(
+                                research_id, claim_a['id'], claim_b['id'], rel_result
+                            )
             relationships_rows = get_relationships(research_id)
             classified = compare.detect_contradictions(claims_rows, relationships_rows)
             logger.info(
