@@ -20,6 +20,7 @@ from pathlib import Path
 
 from request import ResearchRequest
 from evaluation.cases import CASES
+from evaluation.metrics import report_metrics
 import research
 from core import database
 
@@ -135,6 +136,7 @@ def main():
         "case_count": len(results),
         "results": results,
     }
+    report["metrics"] = report_metrics(report)
     report_path.write_text(json.dumps(report, indent=2))
     print(f"\nReport written to {report_path}")
 
