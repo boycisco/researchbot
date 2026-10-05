@@ -3,6 +3,7 @@ import json
 from datetime import datetime
 from config import DB_PATH
 from core import models
+from core import migrations
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -13,27 +14,7 @@ def init_db():
     with get_connection() as conn:
         conn.executescript(models.SCHEMA)
         conn.commit()
-
-        migrations = [
-            ("rank",               "ALTER TABLE sources ADD COLUMN rank INTEGER DEFAULT 0"),
-            ("http_status",        "ALTER TABLE sources ADD COLUMN http_status INTEGER"),
-            ("fetched_at",         "ALTER TABLE sources ADD COLUMN fetched_at TIMESTAMP"),
-            ("parent_source_id",   "ALTER TABLE sources ADD COLUMN parent_source_id INTEGER"),
-            ("source_lineage",     "ALTER TABLE sources ADD COLUMN source_lineage TEXT"),
-            ("bias_score",         "ALTER TABLE sources ADD COLUMN bias_score REAL"),
-            ("completeness_score", "ALTER TABLE sources ADD COLUMN completeness_score REAL"),
-            ("confidence_score",       "ALTER TABLE claims ADD COLUMN confidence_score REAL"),
-            ("confidence_level",       "ALTER TABLE claims ADD COLUMN confidence_level TEXT"),
-            ("confidence_explanation", "ALTER TABLE claims ADD COLUMN confidence_explanation TEXT"),
-        ]
-
-        for column_name, sql in migrations:
-            try:
-                conn.execute(sql)
-                conn.commit()
-            except sqlite3.OperationalError as e:
-                if "duplicate column" not in str(e).lower():
-                    raise
+        migrations.run_migrations(conn)
 
 # User helpers
 def get_or_create_user(telegram_id):
@@ -63,6 +44,10 @@ def update_research_status(research_id, status=None, stage=None, error=None, int
         if status is not None:
             fields.append("status=?")
             params.append(status)
+            if status == 'analyzing':
+                fields.append("started_at=COALESCE(started_at, CURRENT_TIMESTAMP)")
+            if status in ('completed', 'failed', 'cancelled'):
+                fields.append("completed_at=CURRENT_TIMESTAMP")
         if stage is not None:
             fields.append("current_stage=?")
             params.append(stage)

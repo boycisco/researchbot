@@ -119,4 +119,18 @@ CREATE TABLE IF NOT EXISTS user_states (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+
+-- Indexes (also covered by migration 011 for existing databases)
+CREATE INDEX IF NOT EXISTS idx_sources_research        ON sources(research_id);
+CREATE INDEX IF NOT EXISTS idx_sources_canonical       ON sources(research_id, canonical_url);
+CREATE INDEX IF NOT EXISTS idx_claims_research         ON claims(research_id);
+CREATE INDEX IF NOT EXISTS idx_claims_source           ON claims(source_id);
+CREATE INDEX IF NOT EXISTS idx_relationships_research  ON relationships(research_id);
+CREATE INDEX IF NOT EXISTS idx_queries_research        ON queries(research_id);
+CREATE INDEX IF NOT EXISTS idx_packages_research       ON packages(research_id);
+CREATE INDEX IF NOT EXISTS idx_answers_research        ON answers(research_id);
+CREATE INDEX IF NOT EXISTS idx_research_user_created   ON research(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_research_status         ON research(status);
+
 """
