@@ -4,13 +4,14 @@ import time
 from threading import Semaphore
 from ddgs import DDGS
 import utils
+import config
 from ai import prompts
 from core import providers
 
 logger = utils.logger
 
 # Global semaphore for search requests (thread-safe)
-search_semaphore = Semaphore(5)  # max concurrent searches
+search_semaphore = Semaphore(config.MAX_SEARCHES)
 
 def generate_queries(analysis_json, max_queries=8):
     """Use Gemini to generate search queries based on analysis."""

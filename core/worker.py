@@ -3,6 +3,7 @@ import threading
 import time
 import json
 import utils
+import config
 from core.database import *
 from stages import search
 from stages import fetch
@@ -19,8 +20,8 @@ from core import confidence
 logger = utils.logger
 
 # Concurrency control (process-wide semaphores)
-research_semaphore = threading.Semaphore(5)  # max concurrent research jobs
-fetch_semaphore = threading.Semaphore(5)     # max concurrent fetches
+research_semaphore = threading.Semaphore(config.MAX_RESEARCH_JOBS)
+fetch_semaphore    = threading.Semaphore(config.MAX_SOURCE_FETCHES)
 
 def run_research(research_id, progress_callback=None, profile=None):
     """Main orchestration function for a research job. Runs in a separate thread."""

@@ -12,11 +12,12 @@ if not TELEGRAM_BOT_TOKEN:
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY not set in .env")
 
-# Concurrency limits
-MAX_RESEARCH_JOBS = 3
-MAX_SOURCE_FETCHES = 5
-MAX_SEARCHES = 5
-MAX_AI_REQUESTS = 3
+# Concurrency limits (overridable via .env)
+MAX_RESEARCH_JOBS    = int(os.getenv("MAX_RESEARCH_JOBS", 3))
+MAX_SOURCE_FETCHES   = int(os.getenv("MAX_SOURCE_FETCHES", 5))
+MAX_SEARCHES         = int(os.getenv("MAX_SEARCHES", 5))
+MAX_AI_REQUESTS      = int(os.getenv("MAX_AI_REQUESTS", 10))    # AI calls per minute
+AI_REQUEST_TIMEOUT_S = int(os.getenv("AI_REQUEST_TIMEOUT_S", 30))  # per AI call, seconds
 
 # Jobs left in an active state for longer than this (in minutes)
 # are considered abandoned and marked as failed on startup.
