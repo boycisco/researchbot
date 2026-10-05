@@ -42,6 +42,15 @@ def run_research(research_id, progress_callback=None, profile=None):
                 if progress_callback:
                     progress_callback(research_id, stage)
 
+            def check_cancelled(stage_name):
+                """Return True if cancellation was requested; mark and signal if so."""
+                if is_cancel_requested(research_id):
+                    logger.info(f"Research {research_id} cancelled at stage '{stage_name}'")
+                    update_research_status(research_id, status='cancelled', stage=stage_name)
+                    send_progress('cancelled')
+                    return True
+                return False
+
             # Stage 1: Analysis
             send_progress('analysis')
             update_research_status(research_id, status='analyzing', stage='analysis')
@@ -54,9 +63,7 @@ def run_research(research_id, progress_callback=None, profile=None):
             update_research_status(research_id, intent=analysis.get('intent', ''))
             logger.info(f"Analysis done: {analysis.get('main_topic')}")
 
-            if is_cancel_requested(research_id):
-                update_research_status(research_id, status='cancelled', stage='analysis')
-                send_progress('cancelled')
+            if check_cancelled('analysis'):
                 return
 
             # Stage 2: Query generation
@@ -83,9 +90,7 @@ def run_research(research_id, progress_callback=None, profile=None):
             update_research_status(research_id, status='searching', stage='search')
             all_sources = []
             for q in query_rows:
-                if is_cancel_requested(research_id):
-                    update_research_status(research_id, status='cancelled', stage='search')
-                    send_progress('cancelled')
+                if check_cancelled('search'):
                     return
                 results = providers.search_web(
                     q['query'],
@@ -112,9 +117,7 @@ def run_research(research_id, progress_callback=None, profile=None):
             update_research_status(research_id, status='fetching', stage='fetching')
             all_sources = all_sources[:profile['max_sources_to_fetch']]
             for source in all_sources:
-                if is_cancel_requested(research_id):
-                    update_research_status(research_id, status='cancelled', stage='fetching')
-                    send_progress('cancelled')
+                if check_cancelled('fetching'):
                     return
                 with fetch_semaphore:
                     fetch_result = fetch.fetch_source(source['url'])
@@ -143,6 +146,9 @@ def run_research(research_id, progress_callback=None, profile=None):
                 f"Fetched content from {len(sources_with_content)} sources "
                 f"(depth={profile.get('max_sources_to_verify')})"
             )
+
+            if check_cancelled('pre_verification'):
+                return
 
             # Stage 5: Verify sources (batch)
             send_progress('verification')
@@ -176,6 +182,9 @@ def run_research(research_id, progress_callback=None, profile=None):
             verified_sources = [s for s in sources_with_content if s.get('verification_status') == 'verified']
             logger.info(f"Verified {verified_count} sources")
 
+            if check_cancelled('pre_claim_extraction'):
+                return
+
             # Stage 6: Extract claims (batch)
             send_progress('claim_extraction')
             update_research_status(research_id, status='extracting', stage='claim_extraction')
@@ -203,9 +212,7 @@ def run_research(research_id, progress_callback=None, profile=None):
                 max_pairs=profile['max_claim_pairs'],
             )
             for claim_a, claim_b, sim in candidate_pairs:
-                if is_cancel_requested(research_id):
-                    update_research_status(research_id, status='cancelled', stage='comparison')
-                    send_progress('cancelled')
+                if check_cancelled('comparison'):
                     return
                 rel_result = compare.compare_claims(claim_a, claim_b)
                 if rel_result:
@@ -244,6 +251,9 @@ def run_research(research_id, progress_callback=None, profile=None):
             store_package(research_id, package_content)
             logger.info("Package built")
 
+            if check_cancelled('pre_writing'):
+                return
+
             # Stage 9: Write answer
             send_progress('writing')
             update_research_status(research_id, status='writing', stage='writing')
@@ -262,6 +272,9 @@ def run_research(research_id, progress_callback=None, profile=None):
                 return
             store_answer(research_id, answer_text, 'unverified')
 
+            if check_cancelled('pre_fact_checking'):
+                return
+
             # Stage 10: Fact check and revision loop
             send_progress('fact_checking')
             update_research_status(research_id, status='checking', stage='fact_checking')
@@ -269,6 +282,8 @@ def run_research(research_id, progress_callback=None, profile=None):
             final_verification_status = None
 
             for attempt in range(max_revisions + 1):
+                if check_cancelled('fact_checking'):
+                    return
                 check_result = checker.check_answer(answer_text, package_content)
 
                 if check_result['status'] == 'verification_error':

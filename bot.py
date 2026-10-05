@@ -143,13 +143,22 @@ async def cancel_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     telegram_id = str(user.id)
     user_id = database.get_or_create_user(telegram_id)
-    # Find active research for user
+
     research_list = database.get_user_research(user_id)
     for r in research_list:
         if r['status'] not in ('completed', 'failed', 'cancelled'):
             database.set_cancel_requested(r['id'], True)
-            await update.message.reply_text(f"Cancellation requested for research {r['id']}.")
+            topic = (r['topic'] or '').strip()
+            short_topic = topic if len(topic) <= 60 else topic[:57] + "..."
+            await update.message.reply_text(
+                f"🛑 Cancellation requested for research {r['id']}.\n"
+                f"Topic: {short_topic}\n"
+                f"Current stage: {r['current_stage'] or 'unknown'}\n\n"
+                "The worker will stop at the next checkpoint. "
+                "Partial research data remains in your history."
+            )
             return
+
     await update.message.reply_text("No active research to cancel.")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
