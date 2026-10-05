@@ -95,26 +95,31 @@ These are not style preferences. Breaking them breaks the design.
 
 ## Testing
 
-There is no automated test suite yet. Manual testing is the current
-expectation:
+There are two layers of tests.
+
+**Automated (fast, deterministic):**
 
 ```bash
-python cli.py "<a real question>"
+python -m pytest tests/ -v
 ```
 
-Watch the log lines. Every stage must complete.
+These tests cover URL normalization, request validation, confidence
+scoring, claim comparison, the fact-checker's response handling, and
+package building. They must all pass before you submit a PR.
 
-Read the final answer. It must be coherent, cited, and not contain
-leaked prompt artifacts (`CITATION FORMAT:`, `【…】`, markdown
-headings from the model, etc.).
+**Manual (slow, non-deterministic):**
 
-If the pipeline fails, check that the failure is explicit — status
-`failed`, correct stage, non-empty error field in the research
-table.
+The evaluation harness runs the pipeline end-to-end against real
+search and real Gemini. It is not part of the PR check; run it when
+you have changed a pipeline stage and want to see behavior on real
+questions.
 
-If you change a stage, run the pipeline at least twice. The AI is
-non-deterministic; a change that works once may still fail on the
-second run.
+```bash
+python -m evaluation.run --case simple-factual
+python -m evaluation.report
+```
+
+See `docs/ARCHITECTURE.md` for what each stage is supposed to do.
 
 ## Adding a database column
 
