@@ -10,55 +10,80 @@ and things move as they need to.
 
 ### Added
 
-- `ResearchRequest` dataclass for validating topics before they enter
-  the pipeline (`request.py`).
-- Provider boundary (`core/providers.py`) so the pipeline depends on
-  capabilities, not vendors. Currently only Gemini (AI), DuckDuckGo
-  (search), and `requests` + `trafilatura` (fetch) are implemented.
-- Deterministic, explainable confidence scoring per claim
+- **Research depth modes.** `quick`, `standard`, `deep`, `exhaustive`,
+  each with its own query budget, source budget, claim-pair budget,
+  key-findings threshold, and revision limit. Defined in
+  `request.py → DEPTH_PROFILES`.
+- **Deterministic, explainable confidence scoring** per claim
   (`core/confidence.py`). Score is computed from AI confidence, source
   quality, source independence, recency, primary-source bonus, and a
   contradiction penalty. An explanation string is stored with each
   claim.
-- Per-sentence fact-checker with an automatic revision loop
+- **Per-sentence fact-checker** with automatic revision loop
   (`stages/checker.py`, `stages/writer.py`). Unsupported or
-  contradicted sentences trigger up to two revisions; if the answer
+  contradicted sentences trigger up to N revisions; if the answer
   still fails, the job is marked `failed` and nothing is delivered.
-- Expanded claim relationships: `supports`, `partially_supports`,
+- **Expanded claim relationships**: `supports`, `partially_supports`,
   `contradicts`, `qualifies`, `different_context`, `related`,
-  `unrelated`. True contradictions are now separated from
+  `unrelated`. True contradictions are separated from
   different-context cases (`stages/compare.py`).
-- Verbatim evidence is stored on every claim (`stages/claims.py`).
-- Canonical URL normalization with tracking-parameter stripping and
-  `www.` removal (`utils.normalize_url`). Database-level deduplication
-  by canonical URL (`core/database.py`).
-- Batch verification and batch claim-extraction calls to reduce AI
+- **Batched claim comparison.** All candidate pairs classified in one
+  AI call by default; per-pair mode available via `COMPARE_MODE`.
+- **Verbatim evidence** stored on every claim (`stages/claims.py`).
+- **Canonical URL normalization** with tracking-parameter stripping
+  and `www.` removal (`utils.normalize_url`). Database-level
+  deduplication by canonical URL (`core/database.py`).
+- **Batch verification and batch claim extraction** to reduce AI
   request volume (`stages/verify.py`, `stages/claims.py`).
-- Rate limiting, retry-with-backoff, and JSON extraction on the Gemini
-  provider (`ai/gemini.py`).
-- Migration system in `init_db()` — additive and idempotent
-  (`core/database.py`).
-- CLI entry point for testing without Telegram (`cli.py`).
-- Documentation: `README.md`, `docs/ARCHITECTURE.md`,
+- **Rate limiting, retry-with-backoff, request timeouts, and
+  retry-delay parsing** on the Gemini provider (`ai/gemini.py`). A
+  hard cap prevents multi-hour sleeps when the daily quota is
+  exhausted.
+- **AI call timing and per-stage timing** logged for every run.
+- **Cooperative cancellation** with checkpoints between stages and
+  inside search/fetch/comparison loops (`core/worker.py`).
+- **Stale job recovery** on startup (`core/database.py →
+  recover_stale_jobs`).
+- **Migration system** with a `schema_migrations` table and a
+  `MIGRATIONS` list in `core/migrations.py`.
+- **Health check module** (`health.py`) covering database, search,
+  fetch, and optionally the AI provider.
+- **Evaluation framework** (`evaluation/`) with curated cases,
+  per-case metrics, aggregate metrics, and report comparison.
+- **pytest regression suite** covering URL normalization, request
+  validation, confidence scoring, claim comparison, checker response
+  handling, package building, cancellation helpers, and recovery
+  logic.
+- **CLI entry point** (`cli.py`) for testing without Telegram.
+- **Documentation**: `README.md`, `docs/ARCHITECTURE.md`,
+  `docs/ROADMAP.md`, `docs/providers.md`,
   `.github/CONTRIBUTING.md`, `.github/SECURITY.md`,
-  `.github/CODE_OF_CONDUCT.md`.
+  `.github/CODE_OF_CONDUCT.md`, and five issue templates under
+  `.github/ISSUE_TEMPLATE/`.
 
 ### Changed
 
-- Project layout reorganized into packages:
+- **Project layout reorganized into packages:**
   - `ai/` — Gemini + prompts
-  - `core/` — orchestration, storage, confidence, package builder
+  - `core/` — orchestration, storage, confidence, package builder,
+    providers, migrations
   - `stages/` — one module per pipeline stage
   - `ui/` — Telegram formatting
-- Writer prompt rewritten to enforce per-sentence citations,
+- **Writer prompt rewritten** to enforce per-sentence citations,
   renumber sources from 1, forbid leaked instructions, and align
   wording with confidence levels.
-- Writer output is post-processed to strip leaked prompt artifacts
-  (`stages/writer.py` → `clean_answer`).
-- Research package structure expanded to include `search_strategy`,
-  `source_claim_map`, per-claim `source_url`, and full confidence
-  fields (`core/package.py`).
-- `.github/` and `docs/` created; community files moved into
+- **Writer output is post-processed** to strip leaked prompt
+  artifacts (`stages/writer.py → clean_answer`).
+- **Research package structure expanded** to include
+  `search_strategy`, `source_claim_map`, per-claim `source_url`, and
+  full confidence fields (`core/package.py`).
+- **Fetch robustness.** The pipeline now fetches more sources than it
+  plans to verify, so a few failed fetches don't cause the whole run
+  to fail.
+- **Concurrency limits are env-configurable** (`config.py`).
+- **Model default** is `gemini-3.1-flash-lite` (the free-tier model
+  with the highest quota).
+- **`.github/` and `docs/` created**; community files moved into
   `.github/`.
 
 ### Fixed
@@ -67,27 +92,28 @@ and things move as they need to.
   multiple search queries.
 - `sqlite3.Row` objects failing on `.get()` calls in claim comparison
   and package building.
-- Migrations previously only checked the `sources` table; now
-  migrations are applied without a table-specific pre-check, so
-  `claims` migrations actually run.
-- `bias_score` and `completeness_score` were referenced by the
-  verifier but not present in the database until a migration was
-  added.
-- FutureWarning from the deprecated `google.generativeai` package is
+- Migrations previously only checked the `sources` table; migrations
+  are now tracked in `schema_migrations` and applied without a
+  table-specific pre-check.
+- `bias_score` and `completeness_score` referenced by the verifier
+  but missing from the database until migrations were added.
+- `FutureWarning` from the deprecated `google.generativeai` package
   suppressed at import time.
 - Noisy third-party loggers (`ddgs`, `primp`, `hickory_net`,
   `trafilatura`) silenced to `ERROR`.
+- Channel posts (from Telegram channels the bot can see) no longer
+  crash the handlers.
+- `health.py` canary URL changed to a content-rich page so it isn't
+  rejected by the extractor's minimum-length threshold.
 
 ### Known limitations
 
-- Only Gemini and DuckDuckGo are implemented.
+- Only Gemini (AI) and DuckDuckGo (search) are implemented.
 - No primary-source discovery.
-- No research depth modes yet (planned: quick / standard / deep /
-  exhaustive).
-- No automated test suite.
-- No job recovery after a crash; failed jobs stay failed.
+- No resumable jobs — a failed research job must be restarted.
 - No evidence-graph UI.
 - Confidence weights are heuristic, not tuned against a benchmark.
+- No automated integration tests for the pipeline itself.
 
 ## [0.0.1] — Initial scaffold
 

@@ -12,34 +12,37 @@ evidence actually says.
 
 ## Status
 
-Early-stage. Works end-to-end but rough around the edges.
+Early-stage. Works end-to-end. Rough around the edges.
 
 **What works today:**
 
 - Full research pipeline from topic to cited answer
-- Telegram interface with progress updates
+- Telegram interface with progress updates via a single edited message
 - Terminal CLI (`cli.py`) for testing without Telegram
-- Deterministic confidence scoring per claim
-- Per-sentence fact-checking with an automatic revision loop
+- Research depth modes: `quick`, `standard`, `deep`, `exhaustive`
+- Deterministic, explainable confidence scoring per claim
+- Per-sentence fact-checking with automatic revision (up to N attempts)
 - Source deduplication by canonical URL
+- Cooperative cancellation with checkpoints between stages
+- Startup recovery for stale jobs
+- Health check (`python -m health`) covering database, search, fetch, and AI
+- Evaluation harness that runs real questions and reports metrics
+- 51 pytest regression tests covering the deterministic core
 - Provider boundaries for AI, search, and fetching
 
 **What does not work yet (or is weak):**
 
-- Only one AI provider (Gemini) and one search provider
-  (DuckDuckGo) are implemented
+- Only Gemini (AI) and DuckDuckGo (search) are implemented
 - No primary-source discovery
-- No evidence graph / "why does it say this?" tracing UI
-- Free tiers of both providers rate-limit aggressively
+- No evidence-graph "why does it say this?" tracing UI
+- Free-tier AI is slow and rate-limited; expect long pauses
 - DuckDuckGo sometimes returns no results or times out
-- No web interface, no API, no research depth modes yet
-- No automated test suite
+- No web interface, no public API
+- No resumable jobs — a failed research job must be restarted
 
 If you self-host this, expect to babysit it.
 
 ## Pipeline
-
-```text
 Topic
 ↓
 Analysis (what is the question actually asking?)
@@ -50,11 +53,11 @@ Web search
 ↓
 Source fetching
 ↓
-Source verification (relevance, quality, bias, recency)
+Source verification (relevance, quality, evidence, recency, bias, completeness)
 ↓
 Claim extraction (verbatim evidence stored)
 ↓
-Claim comparison (supports, contradicts, qualifies, different context)
+Claim comparison (supports / contradicts / qualifies / different_context)
 ↓
 Deterministic confidence scoring
 ↓
@@ -64,12 +67,13 @@ Answer writing (AI, constrained to the package only)
 ↓
 Per-sentence fact-checking
 ↓
-Revision loop (max 2 attempts)
+Revision loop (bounded)
 ↓
 Verified answer
-```
 
-Nothing reaches the user unless the fact checker says every factual
+text
+
+Nothing reaches the user unless the fact-checker says every factual
 sentence is supported by the research package.
 
 ## Architecture
@@ -79,34 +83,28 @@ breakdown. In brief:
 
 ```text
 researchbot/
-├── bot.py, cli.py                  entry points (Telegram / terminal)
-├── research.py                    application layer
-├── request.py                     ResearchRequest dataclass
+├── bot.py, cli.py entry points (Telegram / terminal)
+├── health.py health check
+├── research.py application layer
+├── request.py ResearchRequest + depth profiles
 ├── config.py, utils.py
 │
-├── core/                          orchestration + storage
-│   ├── worker
-│   ├── database
-│   ├── models
-│   ├── confidence
-│   ├── package
-│   └── providers
+├── core/ orchestration + storage
+│   ├── worker, database, models, migrations,
+│   ├── confidence, package, providers
+│   └── ...
 │
-├── stages/                        pipeline stages
-│   ├── search
-│   ├── fetch
-│   ├── verify
-│   ├── claims
-│   ├── compare
-│   ├── writer
-│   └── checker
+├── stages/ pipeline stages
+│   ├── search, fetch, verify, claims, compare, writer, checker
+│   └── ...
 │
-├── ai/                           gemini, prompts
-├── ui/                           format, history
+├── ai/ gemini, prompts
+├── ui/ format, history
 │
-├── docs/                         ARCHITECTURE.md
-├── .github/                      CONTRIBUTING, CODE_OF_CONDUCT, SECURITY
-└── ...
+├── evaluation/ curated cases + metrics
+├── tests/ pytest suite
+├── docs/ ARCHITECTURE, ROADMAP, providers
+└── .github/ CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, ISSUE_TEMPLATE
 ```
 
 ## Installation
@@ -114,20 +112,19 @@ researchbot/
 Requires **Python 3.11+**.
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/boycisco/researchbot.git
 cd researchbot
 python -m venv venv
 
 # Windows
 venv\Scripts\activate
-
 # macOS / Linux
 source venv/bin/activate
 
 pip install -r requirements.txt
 ```
 
-## Configuration
+### Configuration
 
 Copy `.env.example` to `.env` and fill in two required keys:
 
@@ -141,21 +138,37 @@ Both are free to obtain.
 Optional overrides (defaults shown):
 
 ```env
+# Providers
 AI_PROVIDER=gemini
 SEARCH_PROVIDER=duckduckgo
-GEMINI_MODEL=gemini-1.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite
+
+# Concurrency / rate limits
+MAX_RESEARCH_JOBS=3
+MAX_SOURCE_FETCHES=5
+MAX_SEARCHES=5
+MAX_AI_REQUESTS=12          # AI calls per minute (free tier allows 15)
+AI_REQUEST_TIMEOUT_S=30     # per AI call
+
+# Comparison strategy
+COMPARE_MODE=batch          # "batch" (fewer AI calls) or "per_pair"
+
+# Job recovery
+RECOVERY_MAX_AGE_MINUTES=30
+
+# Storage
+DB_PATH=researchbot.db
 ```
 
-## Running
+### Running
 
-Terminal (recommended for testing):
+Terminal — recommended for testing:
 
 ```bash
 python cli.py "What causes ocean warming?"
+python cli.py "Is intermittent fasting effective?" --depth quick
+python cli.py "Does remote work increase productivity?" --depth deep
 ```
-
-The CLI prints progress to the console and shows the final answer,
-or the final failure reason if the pipeline failed.
 
 Telegram:
 
@@ -167,7 +180,8 @@ Then message your bot:
 
 - `/start` — welcome
 - `/research <topic>` — start a research job
-- `/research` — bot will ask for a topic in the next message
+- `/research --quick <topic> / --deep / --exhaustive` — depth modes
+- `/research (no topic)` — bot will ask for one in the next message
 - `/history` — list your past research
 - `/get <id>` — retrieve a completed answer
 - `/cancel` — request cancellation of the active job
@@ -175,24 +189,50 @@ Then message your bot:
 Progress is shown as a single edited message, not a stream of
 updates.
 
+### Health check
+
+```bash
+python -m health              # database, search, fetch (fast)
+python -m health --with-ai    # also tests the AI provider (uses quota)
+```
+
+### Regression tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+### Evaluation harness
+
+```bash
+python -m evaluation.run --list                    # list cases
+python -m evaluation.run --case simple-factual     # run one
+python -m evaluation.report                        # show newest metrics
+python -m evaluation.report --compare <report>     # compare two reports
+```
+
+Use a separate database for evaluation runs to avoid polluting your
+real history:
+
+```powershell
+$env:DB_PATH="researchbot-eval.db"
+python -m evaluation.run --case simple-factual
+```
+
 ## Limitations
 
-Provider rate limits. Gemini's free tier is limited; the pipeline adds
-retries and backoff but can still hit quota.
-
-Search reliability. DuckDuckGo is free but flaky. Some queries return
-zero results.
-
-No tests. Verify changes manually via cli.py.
-
-No persistence layer for retries. A failed research job stays failed;
-restarting means starting a new job.
-
-No primary-source prioritization yet. Secondary sources that reference
-a study are treated similarly to the study itself.
-
-Confidence scoring is a heuristic. It's deterministic and auditable,
-but its weights have not been tuned against a benchmark.
+- AI free tier is slow. Gemini's free tier is rate-limited to a few
+  requests per minute and can take 30+ seconds per call. The pipeline
+  adds retries and timeouts, but a research run still takes minutes.
+- Search reliability. DuckDuckGo is free but flaky.
+- No resumable jobs. A failed research job stays failed.
+- No primary-source prioritization. Secondary sources are treated
+  similarly to the primaries they reference.
+- Confidence scoring is a heuristic. Deterministic and auditable,
+  but not yet tuned against a benchmark.
+- No automated integration tests. The pytest suite covers
+  deterministic modules; the pipeline itself is tested by hand and by
+  the evaluation harness.
 
 ## Contributing
 
@@ -201,6 +241,10 @@ See [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md).
 ## Security
 
 See [.github/SECURITY.md](.github/SECURITY.md).
+
+## Roadmap
+
+See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## License
 

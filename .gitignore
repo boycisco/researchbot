@@ -9,3 +9,4 @@ backups/
 logs/
 *.log
 evaluation/results/
+.pytest_cache/
