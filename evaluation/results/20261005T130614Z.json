@@ -1,0 +1,25 @@
+{
+  "timestamp": "20261005T130614Z",
+  "db_path": "researchbot-eval.db",
+  "case_count": 1,
+  "results": [
+    {
+      "case_id": "no-useful-sources",
+      "category": "no_useful_sources",
+      "depth": "quick",
+      "question": "What was the exact agenda of the private meeting held in the town of Xyzzyplugh on 2019-03-14?",
+      "research_id": 2,
+      "final_status": "failed",
+      "error": "No sources fetched successfully",
+      "duration_seconds": 523.2,
+      "summary": {
+        "verified_source_count": 0,
+        "claim_count": 0,
+        "relationship_count": 0,
+        "average_claim_confidence": null,
+        "answer_verification_status": null,
+        "answer_length_chars": 0
+      }
+    }
+  ]
+}

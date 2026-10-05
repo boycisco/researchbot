@@ -19,7 +19,7 @@ MAX_SEARCHES = 5
 MAX_AI_REQUESTS = 3
 
 # Database file
-DB_PATH = "researchbot.db"
+DB_PATH = os.getenv("DB_PATH", "researchbot.db")
 
 AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini")
 SEARCH_PROVIDER = os.getenv("SEARCH_PROVIDER", "duckduckgo")
