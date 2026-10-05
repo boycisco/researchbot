@@ -158,6 +158,14 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     # Initialize database
     database.init_db()
+
+    # Recover any jobs left over from a previous crash
+    recovered = database.recover_stale_jobs(
+        max_age_minutes=config.RECOVERY_MAX_AGE_MINUTES
+    )
+    if recovered:
+        logger.warning(f"Recovered {recovered} stale research job(s)")
+
     # Build application
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     # Register handlers

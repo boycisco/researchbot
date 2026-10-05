@@ -254,3 +254,47 @@ def clear_user_state(telegram_id):
     with get_connection() as conn:
         conn.execute("DELETE FROM user_states WHERE telegram_id=?", (telegram_id,))
         conn.commit()
+
+# Recovery helper
+ACTIVE_STATUSES = (
+    'analyzing', 'planning', 'searching', 'fetching',
+    'verifying', 'extracting', 'comparing', 'scoring',
+    'packaging', 'writing', 'checking',
+)
+
+
+def recover_stale_jobs(max_age_minutes=30):
+    """
+    Mark jobs stuck in an active state for longer than max_age_minutes
+    as failed, with a clear reason.
+
+    Returns the number of jobs that were recovered.
+    """
+    with get_connection() as conn:
+        placeholders = ",".join(["?"] * len(ACTIVE_STATUSES))
+        rows = conn.execute(f"""
+            SELECT id, status, current_stage, updated_at
+            FROM research
+            WHERE status IN ({placeholders})
+              AND updated_at < datetime('now', ?)
+        """, (*ACTIVE_STATUSES, f"-{max_age_minutes} minutes")).fetchall()
+
+        if not rows:
+            return 0
+
+        for row in rows:
+            conn.execute("""
+                UPDATE research
+                SET status='failed',
+                    current_stage='recovered',
+                    error=?,
+                    completed_at=CURRENT_TIMESTAMP,
+                    updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            """, (
+                f"Abandoned (no update for >{max_age_minutes} minutes; "
+                f"last stage was '{row['current_stage']}')",
+                row['id'],
+            ))
+        conn.commit()
+        return len(rows)

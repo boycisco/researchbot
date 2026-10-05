@@ -18,6 +18,10 @@ MAX_SOURCE_FETCHES = 5
 MAX_SEARCHES = 5
 MAX_AI_REQUESTS = 3
 
+# Jobs left in an active state for longer than this (in minutes)
+# are considered abandoned and marked as failed on startup.
+RECOVERY_MAX_AGE_MINUTES = 30
+
 # Database file
 DB_PATH = os.getenv("DB_PATH", "researchbot.db")
 

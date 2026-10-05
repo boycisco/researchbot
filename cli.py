@@ -24,6 +24,10 @@ def main():
 
     database.init_db()
 
+    recovered = database.recover_stale_jobs(max_age_minutes=30)
+    if recovered:
+        print(f"Recovered {recovered} stale research job(s)")
+
     def progress_callback(research_id, stage):
         print(f"[Research {research_id}] Stage: {stage}")
 
