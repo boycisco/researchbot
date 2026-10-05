@@ -129,29 +129,45 @@ def run_research(research_id, progress_callback=None, profile=None):
             _t = time.time()
             send_progress('fetching')
             update_research_status(research_id, status='fetching', stage='fetching')
-            all_sources = all_sources[:profile['max_sources_to_fetch']]
-            for source in all_sources:
+
+            # Try to fetch enough sources to reach the verify target,
+            # but don't try more than the fetch budget.
+            fetch_budget = profile['max_sources_to_fetch']
+            verify_target = profile['max_sources_to_verify']
+
+            candidates = all_sources[:fetch_budget]
+            successful_fetches = 0
+
+            for source in candidates:
                 if check_cancelled('fetching'):
                     return
+
+                # Stop early if we already have enough successes
+                # and would only be fetching extras
+                if successful_fetches >= verify_target:
+                    break
+
                 with fetch_semaphore:
                     fetch_result = fetch.fetch_source(source['url'])
+
                 if fetch_result['success']:
                     source['content'] = fetch_result['content']
                     source['word_count'] = fetch_result['word_count']
                     source['title'] = fetch_result.get('title') or source.get('title')
                     source['published_at'] = fetch_result.get('published_at')
                     update_source_fetch(source['id'], fetch_result)
+                    successful_fetches += 1
                 else:
                     update_source_fetch(source['id'], {
                         'status': fetch_result.get('status', 'failed'),
                         'http_status': fetch_result.get('http_status')
                     })
 
-            # Limit to top 5 sources with content
+            # Sources with usable content, capped at the verify target
             sources_with_content = [
-                s for s in all_sources
+                s for s in candidates
                 if 'content' in s and s['content']
-            ][:profile['max_sources_to_verify']]
+            ][:verify_target]
             if not sources_with_content:
                 update_research_status(research_id, status='failed', stage='fetching', error='No sources fetched successfully')
                 send_progress('failed')

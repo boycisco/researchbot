@@ -8,8 +8,8 @@ DEPTH_PROFILES = {
     "quick": {
         "max_queries":                        3,
         "max_search_results_per_query":       3,
-        "max_sources_to_fetch":               3,
-        "max_sources_to_verify":              3,
+        "max_sources_to_fetch":               6,    # fetch more
+        "max_sources_to_verify":              3,    # verify top 3
         "max_claim_pairs":                   10,
         "min_confidence_for_key_findings":   60,
         "max_revisions":                      1,
@@ -17,8 +17,8 @@ DEPTH_PROFILES = {
     "standard": {
         "max_queries":                        8,
         "max_search_results_per_query":       5,
-        "max_sources_to_fetch":               5,
-        "max_sources_to_verify":              5,
+        "max_sources_to_fetch":              12,    # fetch more
+        "max_sources_to_verify":              5,    # verify top 5
         "max_claim_pairs":                   40,
         "min_confidence_for_key_findings":   70,
         "max_revisions":                      2,
@@ -26,7 +26,7 @@ DEPTH_PROFILES = {
     "deep": {
         "max_queries":                       12,
         "max_search_results_per_query":       6,
-        "max_sources_to_fetch":              10,
+        "max_sources_to_fetch":              20,
         "max_sources_to_verify":             10,
         "max_claim_pairs":                   80,
         "min_confidence_for_key_findings":   70,
@@ -35,7 +35,7 @@ DEPTH_PROFILES = {
     "exhaustive": {
         "max_queries":                       20,
         "max_search_results_per_query":       8,
-        "max_sources_to_fetch":              20,
+        "max_sources_to_fetch":              40,
         "max_sources_to_verify":             20,
         "max_claim_pairs":                  150,
         "min_confidence_for_key_findings":   75,
